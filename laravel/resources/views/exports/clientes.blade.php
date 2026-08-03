@@ -1,0 +1,42 @@
+<table>
+    <thead>
+    <tr>
+        <th>Activo</th>
+        <th>Compro?</th>
+        <th>Registro</th>
+        <th>Nombre</th>
+        <th>Apellido</th>
+        <th>Email</th>
+        <th>Telefono</th>
+        <th>Empresa</th>
+        <th>Cuit</th>
+        <th>Direcci&oacute;n comercial</th>
+        <th>Direcci&oacute;n de entrega/transporte</th>
+    </tr>
+    </thead>
+    <tbody>
+     @forelse($clientes as $cliente)
+     <tr>
+         <td>{{$cliente->estado}}</td>
+         <td>{{$cliente->compro}}
+             </td>
+         <td>{{$cliente->registro}}</td>
+         <td>{{$cliente->nombre}}</td>
+         <td>{{$cliente->apellido}}</td>
+         <td>
+             @if(isset($cliente->emailAux))
+             {{$cliente->emailAux}}
+             @else
+             {{$cliente->username}}
+             @endif
+         </td>
+         <td>{{$cliente->telefono}}</td>
+         <td>{{$cliente->razonSocial}}</td>
+         <td>{{$cliente->cuit}}</td>
+         <td>{{$cliente->direccionComercial}}</td>
+         <td>{{$cliente->direccionEntrega}}</td>
+     </tr>
+     @empty
+     @endforelse
+    </tbody>
+</table>

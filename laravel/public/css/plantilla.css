@@ -1,0 +1,147 @@
+body
+{
+    margin: 0px !important;    
+}
+/*header*/
+
+.activesoli{
+    background-color:#1FC1D6 !important;
+}
+    .fondo{
+            background-color: #F2F2F2;
+            height: 42px;         
+        }
+    .fondo a{
+            color: #000000;
+        }
+        .linea::before{
+            content: "|";
+            color: white; 
+            margin-left: 10px;;  
+        }
+        
+    .fondoheader{
+        background-color: #ECECEC;
+        max-width: 100%;
+        height: 100%;
+        }
+    .container{
+    	max-width:1260px !important;
+    	}
+    	
+    .nav-link{
+        color: #000 !important;        
+    	font-size: 14px;
+        font-weight: 600!important;        
+    }
+
+    .bg-header{
+            background-color: #2C3238;
+        }
+    .icono{
+    	color: #575757;
+    	font-size: 13px;
+    	padding: 6px 5px 5px 5px;
+    	line-height: unset !important;
+    }
+       
+    .input-group{
+    	padding-left: 550px;
+    }
+    .enlace{
+    	color: white;
+        font-size: 12px;
+    		
+    }
+
+    .enlace:hover{
+    		color: #268BC7 !important;
+    		text-decoration: none;
+    	}
+
+    .enlace1 a{
+    	color: #268BC7;
+    }
+    .enlace1 a:hover{
+    	text-decoration: none;
+    }
+
+    .ml-6{
+
+    	padding-left: 100px;
+    	padding-right: 0 !important;
+    }
+    .enlace2 i{
+    	color: green;
+    	font-size: 24px;
+    }
+
+    .enlace2 a{
+    	text-decoration: none;
+    	color: #268BC7;
+
+    }
+    .navbar-light .navbar-nav .nav-link{
+        border-bottom: 3px solid #fff;
+    }
+    .activeheader{
+      font-weight: bold!important;
+      border-bottom: 3px solid #EC458B!important;      
+    }
+
+    /*footer*/
+    
+    .fondofooter{
+        background-color: #1FC1D6;
+        height: 5px;
+    }
+    .circulo i{
+        border-radius: 50%;
+        border: 1x solid grey;
+        padding: 10px;
+
+    }    
+    .letra{
+        
+        font-size:15px;
+        color: #1FC1D6;
+    }
+    .letraenlace{        
+        font-size: 14px;
+        color: #fff;
+        opacity: 0.8;
+        font-weight: 400;
+    }
+    .letraenlace:hover{
+        text-decoration: none;
+        color: #fff;
+        opacity:1;
+        
+    }
+
+    .letrafooter:hover{
+        color:black;
+    }
+
+    .newsletter{
+        /*border-radius: 20px;*/
+        
+    }
+
+    .input-group-text{
+        background-color: #009EE0 !important;
+    }
+    .iconofooter{
+        
+        font-size: 18px;;
+    }
+    .fondofooter2{
+        background-color: #009EE0;
+        height: 55px;
+    }
+    .circulo i{
+        border-radius: 50%;
+        border: 1x solid grey;
+        padding: 10px
+
+    }

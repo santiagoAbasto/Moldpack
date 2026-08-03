@@ -1,0 +1,101 @@
+# macOS / editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.config/
+*.swp
+*.swo
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+laravel/.env
+laravel/.env.*
+!laravel/.env.example
+
+# Laravel generated/runtime files
+laravel/storage/*
+!laravel/storage/app/
+!laravel/storage/app/.gitignore
+!laravel/storage/framework/
+!laravel/storage/framework/.gitignore
+!laravel/storage/framework/cache/
+!laravel/storage/framework/cache/.gitignore
+!laravel/storage/framework/sessions/
+!laravel/storage/framework/sessions/.gitignore
+!laravel/storage/framework/testing/
+!laravel/storage/framework/testing/.gitignore
+!laravel/storage/framework/views/
+!laravel/storage/framework/views/.gitignore
+!laravel/storage/logs/
+!laravel/storage/logs/.gitignore
+laravel/storage/framework/laravel-excel/
+laravel/storage/framework/**/*.tmp
+laravel/bootstrap/cache/*.php
+laravel/public/storage
+laravel/public/hot
+laravel/public/pdf/*.pdf
+laravel/publicstorage
+laravel/publicstorage/
+
+# Dependencies and build artifacts
+laravel/vendor/
+laravel/node_modules/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local databases, backups, dumps and large generated data
+db-backups/
+mysql-data/
+mysql-data-local/
+mysql-logs/
+mysql-run/
+*.sql
+*.sqlite
+*.sqlite3
+*.dump
+*.bak
+*.old
+*.backup
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+storage.zip
+
+# Sensitive AFIP runtime credentials/tokens.
+# Keep WSDL files in git, but never publish cert/key/TA files.
+laravel/app/Http/Controllers/afipsdk/src/Afip_res/cert
+laravel/app/Http/Controllers/afipsdk/src/Afip_res/key
+laravel/app/Http/Controllers/afipsdk/src/Afip_res/*.pem
+laravel/app/Http/Controllers/afipsdk/src/Afip_res/TA-*.xml
+laravel/app/Http/Controllers/afipsdk/src/Afip_res/TRA-*.xml
+laravel/app/Http/Controllers/afipsdk/src/Afip_res/*.tmp
+laravel/app/afipsdk/src/Afip_res/cert
+laravel/app/afipsdk/src/Afip_res/key
+laravel/app/afipsdk/src/Afip_res/*.pem
+laravel/app/afipsdk/src/Afip_res/TA-*.xml
+laravel/app/afipsdk/src/Afip_res/TRA-*.xml
+laravel/app/afipsdk/src/Afip_res/*.tmp
+
+# Local deployment helpers/backups and internal notes
+deploy-moldpack-produccion.sh
+deploy-moldpack-produccion.sh.bak
+import_moldpack_db.sh
+INFORME_AUDITORIA_MOLDPACK.md
+.git-nested-backups/
+
+# Test screenshots and transient QA captures
+laravel/login-redesign-check.png
+laravel/tests/e2e-artifacts/
+
+# PHP tooling caches
+laravel/.phpunit.result.cache
+laravel/.php-cs-fixer.cache
+laravel/.phpstan.cache
