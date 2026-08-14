@@ -7,6 +7,47 @@
         {{ session()->get('success') }}
     </div>
 @endif
+<style>
+  .cantidad-pendiente-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .cantidad-pendiente-alerta {
+    color: #b42318;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.15;
+    text-transform: uppercase;
+  }
+
+  .cantidad-pendiente-campo.is-warning {
+    background: #fff1f1;
+    border: 2px solid #dc2626;
+    color: #b42318;
+    font-weight: 900;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+  }
+
+  .cantidad-logistica-modificada {
+    border: 2px solid #dc2626 !important;
+    background: #fff1f1 !important;
+    color: #b42318 !important;
+    font-weight: 900;
+  }
+
+  .cantidad-logistica-alerta {
+    color: #b42318;
+    display: block;
+    font-size: 11px;
+    font-weight: 900;
+    line-height: 1.15;
+    margin-top: 4px;
+    text-transform: uppercase;
+  }
+
+</style>
 @include('adm.partials.filtros_pedidos', ['routeName' => $routeName ?? 'adm.contabilidad.pedidos', 'estados' => $estados ?? []])
 <table class="table table-bordered">
       <thead style="background:#2E3091;color:#fff">
@@ -68,6 +109,7 @@
           </tr>
         </tbody>
       </table>
+      @include('adm.partials.comentario_pedido', ['item' => $item])
       <div id="msj" style="display:none;position: relative;left: 84%;background: green;width: 150px;text-align: center;border: 2px solid green;color:#fff;"></div>
     </div>
   </div>
@@ -94,6 +136,9 @@
           <div class="col-6 mb-2">
             <input type="hidden" name="presentacion[]" value="{{$value->presentacionid}}">
             <input type="hidden" name="codigo[]" value="{{$value->codigo}}">
+            <input type="hidden" name="idItem[]" value="{{$value->idPedido ?? $loop->index}}">
+            <input type="hidden" name="cantidad_original_cliente[]" value="{{$value->cantidad_original_cliente ?? $value->cantidad}}">
+            <input type="hidden" name="logistica_modificada[]" value="{{!empty($value->cantidad_modificada_logistica) ? 1 : 0}}">
             <input readonly="readonly" class="form-control" id="nombre" name="nombre[]" value="{{$value->codigo}} {{$value->nombre}}">
             </input>
           </div>
@@ -102,41 +147,31 @@
             </input>
           </div>
           <div class="col-1 mb-2">
-            <input  readonly="readonly" class="form-control" id="cantidad" name="cantidad[]" value="{{$value->cantidad}}">
+            <input readonly="readonly" class="form-control @if(!empty($value->cantidad_modificada_logistica)) cantidad-logistica-modificada @endif" id="cantidad" name="cantidad[]" value="{{$value->cantidad}}">
             </input>
+            @if(!empty($value->cantidad_modificada_logistica))
+              <small class="cantidad-logistica-alerta">Logistica modifico: original {{$value->cantidad_original_cliente ?? '-'}}</small>
+            @endif
           </div>
           <div class="col-1 mb-2">
             @php
-              $valueF = 0;
-			  $valueP = 0;	
+              $valueF = (int)($value->cantidadF ?? 0);
+              $valueN = (int)($value->cantidadN ?? 0);
+              $valueP = isset($value->cantidadP) ? (int)$value->cantidadP : 0;
             @endphp
-            @isset($value->cantidadF)
-			@php
-			$valueP = (int)$value->cantidad - (int)$value->cantidadF;
-            @endphp
-            @isset($value->cantidadP)
-                @php $valueP = $value->cantidadP; @endphp
-            @endisset
-            @php $valueF = $value->cantidadF; @endphp
-            @endisset
             <input type="number" min="0" class="form-control" id="cantidad" name="cantidadF[]" value="{{$valueF}}" max="{{$value->cantidad}}">
             </input>
           </div>
           <div class="col-1 mb-2">
-            @php
-            $valueN = 0;
-            @endphp
-            @isset($value->cantidadN)
-            @php $valueN = $value->cantidadN; @endphp
-            @endisset
             <input type="number" min="0" class="form-control" id="cantidad" name="cantidadN[]" value="{{$valueN}}" max="{{$value->cantidad}}">
             </input>
           </div>
           <div class="col-1 mb-2">
-            
-            <input disabled type="number" min="0" @if($valueP != 0) style="background-color:red;font-weight: 900;color: #000;" @endif class="form-control" value="{{$valueP}}" max="{{$value->cantidad}}">
-            <input type="hidden" id="cantidad" name="cantidadP[]" value="{{$valueP}}">
-            </input>
+            <div class="cantidad-pendiente-wrap">
+              <input readonly type="text" class="form-control cantidad-pendiente-campo" value="{{$valueP > 0 ? '+' . $valueP : $valueP}}">
+              <input type="hidden" id="cantidad" name="cantidadP[]" value="{{$valueP}}">
+              <small class="cantidad-pendiente-alerta"></small>
+            </div>
           </div>          
         </div>
         @empty
@@ -186,10 +221,37 @@
     nuevaFila.querySelector('input[name="presentacion[]"]').value = 0;
     nuevaFila.querySelector('input[name="cantidad[]"]').value = 1;
     nuevaFila.querySelector('input[name="codigo[]"]').value = 0;    
+    const idItem = nuevaFila.querySelector('input[name="idItem[]"]');
+    if (idItem) {
+      idItem.value = '';
+    }
+    const cantidadOriginal = nuevaFila.querySelector('input[name="cantidad_original_cliente[]"]');
+    if (cantidadOriginal) {
+      cantidadOriginal.value = 1;
+    }
+    const logisticaModificada = nuevaFila.querySelector('input[name="logistica_modificada[]"]');
+    if (logisticaModificada) {
+      logisticaModificada.value = 0;
+    }
+    const cantidadF = nuevaFila.querySelector('input[name="cantidadF[]"]');
+    if (cantidadF) {
+      cantidadF.value = 1;
+    }
+    const cantidadN = nuevaFila.querySelector('input[name="cantidadN[]"]');
+    if (cantidadN) {
+      cantidadN.value = 0;
+    }
+    nuevaFila.querySelectorAll('.cantidad-logistica-alerta, .cantidad-pendiente-alerta').forEach(function(alerta) {
+      alerta.textContent = '';
+    });
+    nuevaFila.querySelectorAll('.cantidad-logistica-modificada, .cantidad-pendiente-campo').forEach(function(input) {
+      input.classList.remove('cantidad-logistica-modificada', 'is-warning');
+    });
 	nuevaFila.querySelector('#nombre').removeAttribute('readonly');
 	nuevaFila.querySelector('#nombre').setAttribute('type', 'text');
 
     tabla.insertBefore(nuevaFila, primeraFila);
+    pintarPendiente(nuevaFila, true);
 }
   $(document).on('keyup mouseup', '#editar', function() {
       let contenedor = this.parentElement;
@@ -313,31 +375,97 @@
           }
         });
     }
+  function numeroEnteroSeguro(valor) {
+    const numero = parseInt(valor, 10);
+    return Number.isNaN(numero) ? 0 : numero;
+  }
+
+  function pintarPendiente(row, recalcular) {
+    const codigoInput = row.querySelector('input[name="codigo[]"]');
+    const cantidadInput = row.querySelector('input[name="cantidad[]"]');
+    const cantidadOriginalInput = row.querySelector('input[name="cantidad_original_cliente[]"]');
+    const logisticaInput = row.querySelector('input[name="logistica_modificada[]"]');
+    const cantidadFInput = row.querySelector('input[name="cantidadF[]"]');
+    const cantidadNInput = row.querySelector('input[name="cantidadN[]"]');
+    const pendienteInput = row.querySelector('.cantidad-pendiente-campo');
+    const pendienteHidden = row.querySelector('input[name="cantidadP[]"]');
+    const alerta = row.querySelector('.cantidad-pendiente-alerta');
+
+    if (!cantidadInput || !cantidadFInput || !cantidadNInput || !pendienteInput || !pendienteHidden || !alerta) {
+      return;
+    }
+
+    const cantidad = numeroEnteroSeguro(cantidadInput.value);
+    const cantidadOriginal = cantidadOriginalInput ? numeroEnteroSeguro(cantidadOriginalInput.value) : cantidad;
+    const logisticaModificada = logisticaInput && logisticaInput.value === '1';
+    const cantidadA = numeroEnteroSeguro(cantidadFInput.value);
+    const cantidadX = numeroEnteroSeguro(cantidadNInput.value);
+    const esEnvio = codigoInput && numeroEnteroSeguro(codigoInput.value) === 0;
+    const basePendiente = logisticaModificada ? cantidadOriginal : cantidad;
+    const pendiente = recalcular
+      ? (esEnvio ? 0 : basePendiente - cantidadA - cantidadX)
+      : numeroEnteroSeguro(pendienteHidden.value);
+    const etiqueta = pendiente > 0 ? '+' + pendiente : String(pendiente);
+
+    pendienteInput.value = etiqueta;
+    pendienteHidden.value = pendiente;
+    pendienteInput.classList.toggle('is-warning', pendiente !== 0);
+
+    if (pendiente > 0) {
+      alerta.textContent = logisticaModificada
+        ? 'Faltan ' + pendiente + ' unidad(es). Logistica preparo ' + cantidad + ' de ' + cantidadOriginal
+        : 'Faltan ' + pendiente + ' unidad(es)';
+    } else if (pendiente < 0) {
+      alerta.textContent = 'Sobran ' + Math.abs(pendiente) + ' unidad(es)';
+    } else {
+      alerta.textContent = '';
+    }
+  }
+
+  function actualizarPendientesFacturacion(recalcular) {
+    document.querySelectorAll('form[id^="tabla_"] #row').forEach(function(row) {
+      pintarPendiente(row, recalcular);
+    });
+  }
+
 	document.addEventListener('DOMContentLoaded', function() {
-    const cantidadFInputs = document.querySelectorAll('input[name="cantidadF[]"]');
-    const cantidadNInputs = document.querySelectorAll('input[name="cantidadN[]"]');
-    const cantidadTotalInputs = document.querySelectorAll('input[name="cantidad[]"]');
+    actualizarPendientesFacturacion(false);
 
-    const validateSum = (index) => {
-        let sumF = parseInt(cantidadFInputs[index].value || '0');
-        let sumN = parseInt(cantidadNInputs[index].value || '0');
-        let total = parseInt(cantidadTotalInputs[index].value || '0');
+    document.addEventListener('input', function(event) {
+      if (!event.target.matches('input[name="cantidadF[]"], input[name="cantidadN[]"], input[name="cantidad[]"]')) {
+        return;
+      }
 
-        if ((sumF + sumN) > total) {
-            cantidadFInputs[index].style.backgroundColor = 'red';
-            cantidadNInputs[index].style.backgroundColor = 'red';
-        } else {
-            cantidadFInputs[index].style.backgroundColor = '';
-            cantidadNInputs[index].style.backgroundColor = '';
-        }
-    };
-
-    cantidadFInputs.forEach((input, index) => {
-        input.addEventListener('input', () => validateSum(index));
+      const row = event.target.closest('#row');
+      if (row) {
+        pintarPendiente(row, true);
+      }
     });
 
-    cantidadNInputs.forEach((input, index) => {
-        input.addEventListener('input', () => validateSum(index));
+    document.addEventListener('focusin', function(event) {
+      if (!event.target.matches('input[name="cantidadF[]"], input[name="cantidadN[]"], input[name="cantidad[]"], input[name="nombre[]"]')) {
+        return;
+      }
+
+      const row = event.target.closest('#row');
+      if (row) {
+        pintarPendiente(row, true);
+      }
+    });
+
+    document.addEventListener('click', function(event) {
+      const row = event.target.closest('form[id^="tabla_"] #row');
+      if (row) {
+        pintarPendiente(row, true);
+      }
+    });
+
+    document.querySelectorAll('form[id^="tabla_"]').forEach(function(form) {
+      form.addEventListener('submit', function() {
+        form.querySelectorAll('#row').forEach(function(row) {
+          pintarPendiente(row, true);
+        });
+      });
     });
   });
 </script> 

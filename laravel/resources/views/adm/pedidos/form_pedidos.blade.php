@@ -145,11 +145,7 @@ Nombre: {{optional($item->obtenerCliente)->nombre}}
           @endif
       </div>
       
-      @isset($item->mensaje)
-      <hr class="w-100">
-      <div id="msj_tabla_{{$item->id}}" class="my-5">Mensaje: {{$item->mensaje}}</div>
-      <hr class="w-100">
-      @endisset
+      @include('adm.partials.comentario_pedido', ['item' => $item])
 		
 		      <div class="wrap">
           <div class="d-flex flex-row" id="newBoxProduct{{$item->id}}">
@@ -180,8 +176,8 @@ Nombre: {{optional($item->obtenerCliente)->nombre}}
           <tr>            
             <th class="img" scope="col">Imagen</th>
             <th scope="col">Producto</th>
-            <th scope="col">Cantidad</th>
-            <th scope="col">Cantidad a Facturar</th>
+              <th scope="col">Cantidad pedida</th>
+              <th scope="col">Cantidad que envia logistica</th>
             <th scope="col">Stock disponible</th>
             <th scope="col"></th>
           </tr>
@@ -191,7 +187,7 @@ Nombre: {{optional($item->obtenerCliente)->nombre}}
           
           <tr id="form{{$loop->index}}{{$item->id}}">
               <input type="hidden" id="idPedido" value="{{$item->id}}">
-              <input type="hidden" id="idItem" value="{{$value->idPedido}}">
+              <input type="hidden" id="idItem" value="{{$value->idPedido ?? $loop->index}}">
               @csrf
               <td class="img">
                   @isset($value->imagen)
@@ -213,10 +209,15 @@ Nombre: {{optional($item->obtenerCliente)->nombre}}
                 </select>                
               </td>
               <td>
-                <input disabled class="form-control" type="number" value="{{$value->cantidad}}" id="cantidad" name="cantidad">
+                <input disabled data-no-edit="1" class="form-control" type="number" value="{{$value->cantidad_original_cliente ?? $value->cantidad}}" id="cantidad" name="cantidad">
               </td>
               <td>
-                <input  class="form-control" type="number" max="{{$value->cantidad}}" min="0" value="{{$value->cantidad}}" id="cantidadF" name="cantidadF">
+                <input class="form-control" type="number" max="{{$value->cantidad_original_cliente ?? $value->cantidad}}" min="0" value="{{$value->cantidad}}" id="cantidadF" name="cantidadF">
+                @if(!empty($value->cantidad_modificada_logistica))
+                  <small class="text-danger font-weight-bold d-block mt-1">
+                    Modificado por logistica: pedido original {{$value->cantidad_original_cliente ?? '-'}}
+                  </small>
+                @endif
               </td>
               <td>
                 {{$value->stock}}
@@ -333,6 +334,9 @@ Nombre: {{optional($item->obtenerCliente)->nombre}}
       let fila = contenedor.parentElement
        let inputs = fila.querySelectorAll('input')
        inputs.forEach(element => {
+         if (element.dataset.noEdit === '1') {
+           return;
+         }
          element.disabled = false;
        });
       let select = fila.querySelectorAll('select')
@@ -363,6 +367,14 @@ Nombre: {{optional($item->obtenerCliente)->nombre}}
         contentType: false,   // tell jQuery not to set contentType      
         success: function (response) {                  
           console.log(response);
+          formulario.querySelector("#cantidadF").value = formulario.querySelector("#cantidadF").value;
+          const cantidadOriginal = formulario.querySelector("#cantidad").value;
+          const cantidadLogistica = formulario.querySelector("#cantidadF").value;
+          if (cantidadOriginal !== cantidadLogistica) {
+            formulario.querySelector("#cantidadF").classList.add('border-danger', 'text-danger', 'font-weight-bold');
+          } else {
+            formulario.querySelector("#cantidadF").classList.remove('border-danger', 'text-danger', 'font-weight-bold');
+          }
           swal(response,"","success");
         },
         error: function(response){

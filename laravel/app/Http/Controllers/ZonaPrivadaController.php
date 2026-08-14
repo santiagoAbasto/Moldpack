@@ -8,6 +8,7 @@ use App\Models\Color;
 use App\Models\Contacto;
 use App\Models\Herraje;
 use App\Models\Pedido;
+use App\Models\CarritoAbandonado;
 use App\Models\CarritoContenido;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -102,6 +103,105 @@ class ZonaPrivadaController extends Controller
 
     }
 
+    public function obtenerCarritoAbandonado()
+    {
+        $clienteId = Auth::guard('cliente')->id();
+
+        $carrito = CarritoAbandonado::where('cliente_id', $clienteId)
+            ->whereNull('completed_at')
+            ->where('items_count', '>', 0)
+            ->orderByDesc('last_activity_at')
+            ->first();
+
+        if (!$carrito) {
+            return response()->json(['ok' => true, 'items' => []]);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'items' => $carrito->items ?: [],
+            'last_activity_at' => optional($carrito->last_activity_at)->toDateTimeString(),
+        ]);
+    }
+
+    public function guardarCarritoAbandonado(Request $request)
+    {
+        $cliente = Auth::guard('cliente')->user();
+        $items = $request->input('items', []);
+
+        if (is_string($items)) {
+            $items = json_decode($items, true) ?: [];
+        }
+
+        if (!is_array($items)) {
+            $items = [];
+        }
+
+        $itemsNormalizados = [];
+        $cantidadTotal = 0;
+        $totalEstimado = 0;
+
+        foreach ($items as $item) {
+            if (is_object($item)) {
+                $item = (array) $item;
+            }
+
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $nombre = trim((string) ($item['nombre'] ?? ''));
+            $codigo = trim((string) ($item['codigo'] ?? ''));
+            $presentacion = trim((string) ($item['presentacion'] ?? ''));
+            $cantidad = max(1, (int) ($item['cantidad'] ?? 1));
+            $precio = $this->normalizarNumeroCarrito($item['precio'] ?? 0);
+            $subtotal = $this->normalizarNumeroCarrito($item['subtotal'] ?? 0);
+
+            if ($subtotal <= 0 && $precio > 0) {
+                $subtotal = $precio * $cantidad;
+            }
+
+            if ($nombre === '' && $codigo === '' && empty($item['productoid']) && empty($item['producto'])) {
+                continue;
+            }
+
+            $itemsNormalizados[] = [
+                'codigo' => $codigo,
+                'nombre' => $nombre,
+                'presentacion' => $presentacion,
+                'cantidad' => $cantidad,
+                'precio' => round($precio, 2),
+                'subtotal' => round($subtotal, 2),
+                'productoid' => $item['productoid'] ?? ($item['producto'] ?? null),
+                'presentacionid' => $item['presentacionid'] ?? null,
+            ];
+
+            $cantidadTotal += $cantidad;
+            $totalEstimado += $subtotal;
+        }
+
+        if ($cantidadTotal <= 0) {
+            $this->marcarCarritoAbandonadoCompletado();
+
+            return response()->json(['ok' => true, 'cleared' => true]);
+        }
+
+        CarritoAbandonado::updateOrCreate(
+            ['cliente_id' => $cliente->id],
+            [
+                'email' => $cliente->email,
+                'items' => $itemsNormalizados,
+                'items_count' => $cantidadTotal,
+                'total_estimado' => round($totalEstimado, 2),
+                'last_activity_at' => now(),
+                'reminder_sent_at' => null,
+                'completed_at' => null,
+            ]
+        );
+
+        return response()->json(['ok' => true]);
+    }
+
     public function carrito_post(Request $request){
         $contacto = Contacto::first();
         $carrito = CarritoContenido::first();
@@ -133,19 +233,24 @@ class ZonaPrivadaController extends Controller
                 }
 
                 $codigoPresentacion = $presentacionObj->codigo;
+                $precioPedido = round(floatval($presentacionObj->precio), 2);
                 $producto = new stdClass;
                 $producto->imagen = $imagen;
                 $producto->codigo = $codigoPresentacion; // Código de la presentación (SKU)
                 $producto->nombre = $prod->nombre . " " . $presentacionObj->presentacion;
-                $producto->precio = $presentacionObj->precio;
+                $producto->precio = $precioPedido;
+                $producto->precio_congelado = $precioPedido;
                 $producto->presentacionid = $presentacionid;
                 $producto->stock = $presentacionObj->stock;
                 $producto->id = $prod->id;
                 $producto->cantidad = $cantidad;
+                $producto->cantidad_original_cliente = $cantidad;
+                $producto->cantidad_preparada_logistica = $cantidad;
+                $producto->cantidad_modificada_logistica = 0;
                 $producto->idPedido = $i;
                 $arr_carrito[] = $producto;
-                $total += floatval($presentacionObj->precio) * intval($cantidad);
-                $string .= "Producto: " . $prod->nombre . " / Codigo: " . $codigoPresentacion . " / Presentacion: " . $presentacionObj->presentacion . "  / cant: " . $cantidad . " / " . $presentacionObj->precio . "----";
+                $total += $precioPedido * intval($cantidad);
+                $string .= "Producto: " . $prod->nombre . " / Codigo: " . $codigoPresentacion . " / Presentacion: " . $presentacionObj->presentacion . "  / cant: " . $cantidad . " / " . $precioPedido . "----";
             }
         }
         $descuento = 1;
@@ -169,6 +274,7 @@ class ZonaPrivadaController extends Controller
         $pedido->pedido = $carrito_pedido;
         $pedido->mensaje = $request->obeservacion;
         $pedido->save();
+        $this->marcarCarritoAbandonadoCompletado();
         
         $pedido_carrito =new stdClass;        
         $pedido_carrito->mensaje = $request->obeservacion;
@@ -247,18 +353,26 @@ class ZonaPrivadaController extends Controller
                 $carritoEmail = new stdClass;
                 $carritoEmail->nombre = $prod->obtenerCategoria->obtenerProductoCategoria->nombre." ".$prod->obtenerCategoria->nombre;
                 $carritoEmail->codigo = $prod->codigo;                
-                $carritoEmail->precio = $prod->precio;
+                $precioPedido = round(floatval($prod->precio), 2);
+                $carritoEmail->precio = $precioPedido;
+                $carritoEmail->precio_congelado = $precioPedido;
                 $carritoEmail->id = $prod->id;
-                $carritoEmail->cantidad = $request->cantidad[$i];
+                $cantidadPedido = max(1, intval($request->cantidad[$i] ?? 1));
+                $carritoEmail->cantidad = $cantidadPedido;
+                $carritoEmail->cantidad_original_cliente = $cantidadPedido;
+                $carritoEmail->cantidad_preparada_logistica = $cantidadPedido;
+                $carritoEmail->cantidad_modificada_logistica = 0;
+                $carritoEmail->idPedido = $i;
                 array_push($arr_carrito,$carritoEmail);
-                $total += floatval($prod->precio)*intval($request->cantidad[$i]);                
-                $string .="Producto: ".$prod->codigo." / ".$prod->descripcion."  / cant".$request->cantidad[$i]." / ".$prod->precio."----";
+                $total += $precioPedido * $cantidadPedido;
+                $string .="Producto: ".$prod->codigo." / ".$prod->descripcion."  / cant".$cantidadPedido." / ".$precioPedido."----";
             }            
         }         
         $carrito_pedido = json_encode($arr_carrito);
         $pedido->usuario_id = Auth::guard('cliente')->user()->id;
         $pedido->total = $total;
         $pedido->pedido = $carrito_pedido;
+        $pedido->mensaje = $request->msj;
 
         $pedido_carrito =new stdClass;        
         $pedido_carrito->mensaje = $request->msj;
@@ -297,8 +411,38 @@ class ZonaPrivadaController extends Controller
                 Auth::guard('cliente')->user()->email])
             ->send($email);
         $pedido->save();
+        $this->marcarCarritoAbandonadoCompletado();
         
         return view('ZonaPrivada.carrito_fin',compact('contactos','carrito','active','logosheader','logosfooter','redes'));
+    }
+
+    private function normalizarNumeroCarrito($value)
+    {
+        if (is_numeric($value)) {
+            return (float) $value;
+        }
+
+        $value = preg_replace('/[^\d,.\-]/', '', (string) $value);
+
+        if (strpos($value, ',') !== false) {
+            $value = str_replace('.', '', $value);
+            $value = str_replace(',', '.', $value);
+        }
+
+        return (float) $value;
+    }
+
+    private function marcarCarritoAbandonadoCompletado()
+    {
+        $clienteId = Auth::guard('cliente')->id();
+
+        if (!$clienteId) {
+            return;
+        }
+
+        CarritoAbandonado::where('cliente_id', $clienteId)
+            ->whereNull('completed_at')
+            ->update(['completed_at' => now()]);
     }
 
     public function historico(Request $request, $id_cliente)

@@ -23,9 +23,13 @@
   
   <div class="row">
     <div class="form-group col-md-6">
-      <label for="imagen">Imagen Familia</label>
-      <input type="file" class="form-control-file" id="imagen" name="imagen" required>
-      <small>Resolucion recomendada: 390px X 390px</small>
+      <label for="imagen">Imagen categoria / portada home</label>
+      <input type="file" class="form-control-file" id="imagen" name="imagen" accept="image/*" required>
+      <small>Resolucion recomendada: 390px X 390px. Si la categoria esta destacada, esta foto tambien se ve en la pagina principal.</small>
+      <div class="mt-4" id="previewWrap" style="display:none;">
+        <img id="categoriaImagenPreview" src="" class="img-thumbnail" style="max-width:390px;width:100%;height:auto;object-fit:cover;">
+        <div class="mt-2 text-muted" style="font-size:13px;">Vista previa de la imagen que se vera en categoria/home.</div>
+      </div>
     </div>
   </div>
 
@@ -43,7 +47,7 @@
     </label>
   </div>
     
- <button type="submit" class="btn btn-success">Editar</button>
+ <button type="submit" class="btn btn-success">Crear</button>
 </form>
 
 
@@ -66,6 +70,30 @@
                      ]
              });
          });
+
+        document.addEventListener('DOMContentLoaded', function () {
+            var input = document.getElementById('imagen');
+            var preview = document.getElementById('categoriaImagenPreview');
+            var previewWrap = document.getElementById('previewWrap');
+
+            if (!input || !preview || !previewWrap) {
+                return;
+            }
+
+            input.addEventListener('change', function () {
+                var file = input.files && input.files[0];
+                if (!file) {
+                    return;
+                }
+
+                var reader = new FileReader();
+                reader.onload = function (event) {
+                    preview.src = event.target.result;
+                    previewWrap.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            });
+        });
     
 </script>
 

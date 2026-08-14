@@ -50,12 +50,14 @@ class WebhooksController extends Controller
                 $producto = new stdClass;
                 $producto->nombre = $prod->obtenerCategoria->obtenerProductoCategoria->nombre." ".$prod->obtenerCategoria->nombre;
                 $producto->codigo = $prod->codigo;                
-                $producto->precio = $prod->precio;
+                $precioPedido = round(floatval($prod->precio), 2);
+                $producto->precio = $precioPedido;
+                $producto->precio_congelado = $precioPedido;
                 $producto->id = $prod->id;
                 $producto->cantidad = $prodId[1];
                 array_push($arr_productos,$producto);
-                $total += floatval($prod->precio)*intval($prodId[1]);
-                $string .="Producto: ".$prod->codigo." / ".$prod->descripcion."  / cant: ".$prodId[1]." / $ ".$prod->precio."----";
+                $total += $precioPedido * intval($prodId[1]);
+                $string .="Producto: ".$prod->codigo." / ".$prod->descripcion."  / cant: ".$prodId[1]." / $ ".$precioPedido."----";
         }
     } 
     

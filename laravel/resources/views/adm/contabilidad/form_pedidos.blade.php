@@ -7,6 +7,24 @@
         {{ session()->get('success') }}
     </div>
 @endif
+<style>
+  .cantidad-logistica-modificada {
+    border: 2px solid #dc2626 !important;
+    background: #fff1f1 !important;
+    color: #b42318 !important;
+    font-weight: 900;
+  }
+
+  .cantidad-logistica-alerta {
+    color: #b42318;
+    display: block;
+    font-size: 11px;
+    font-weight: 900;
+    line-height: 1.15;
+    margin-top: 4px;
+    text-transform: uppercase;
+  }
+</style>
 @include('adm.partials.filtros_pedidos', ['routeName' => 'adm.facturacion', 'estados' => $estados ?? []])
 
 @forelse ( $pedidos as $item)
@@ -52,6 +70,7 @@
           </tr>
         </tbody>
       </table>
+      @include('adm.partials.comentario_pedido', ['item' => $item])
       <div id="msj" style="display:none;position: relative;left: 84%;background: green;width: 150px;text-align: center;border: 2px solid green;color:#fff;"></div>
     </div>
   </div>
@@ -76,11 +95,16 @@
 			
           <tr id="form{{$loop->index}}{{$item->id}}">
               <input type="hidden" id="idPedido" value="{{$item->id}}">
-              <input type="hidden" id="idItem" value="{{$value->idPedido}}">
+              <input type="hidden" id="idItem" value="{{$value->idPedido ?? $loop->index}}">
               @csrf
               <td><input disabled class="form-control" type="text" value="{{$value->codigo}}" id="codigo" name="codigo"></td>
               <td><input disabled class="form-control" type="text" value="{{$value->nombre}}" id="nombre" name="nombre"></td>
-              <td><input disabled class="form-control" type="number" value="{{$value->cantidad}}" id="cantidad" name="cantidad"></td>
+              <td>
+                <input disabled class="form-control @if(!empty($value->cantidad_modificada_logistica)) cantidad-logistica-modificada @endif" type="number" value="{{$value->cantidad}}" id="cantidad" name="cantidad">
+                @if(!empty($value->cantidad_modificada_logistica))
+                  <small class="cantidad-logistica-alerta">Logistica modifico: original {{$value->cantidad_original_cliente ?? '-'}}</small>
+                @endif
+              </td>
               <td><input disabled class="form-control" type="numbre" value="{{$value->precio}}" id="precio" name="precio"></td>
               <td><input disabled class="form-control" type="number" value="{{floatval($value->precio)*intval($value->cantidad)}}" id="total" name="total"></td>
               <td class="d-flex flex-row justify-content-between">

@@ -599,8 +599,10 @@ truncate cobros;
 
     $idPedido = $request->idPedido;
     $pedido = Pedido::findOrFail($idPedido);
-    $pedidoPedido = $pedido->pedido;
     $pedidoPedido = json_decode($pedido->pedido, true);
+    if (!is_array($pedidoPedido)) {
+      $pedidoPedido = [];
+    }
 
     $pedidoTotal = 0;
     $usuario_id = $pedido->usuario_id;
@@ -642,84 +644,132 @@ truncate cobros;
     $estado = "FACTURADO";
     $facturado = 0;
     $facturadoNegro = 0;
-    $contador = count($request->presentacion);
-	$cantidadPedido = count($pedidoPedido);
-	\Log::info('Matriz cantidadP:', ['array' => $request->cantidadP]); 
-    for ($i = 0; $i < count($request->presentacion); $i++) {
+    $pedidoIndexPorId = [];
+    foreach ($pedidoPedido as $index => $productoPedido) {
+      if (!is_array($productoPedido)) {
+        continue;
+      }
+
+      $pedidoIndexPorId[(string)($productoPedido['idPedido'] ?? $index)] = $index;
+    }
+
+    $presentaciones = $request->input('presentacion', []);
+    $codigos = $request->input('codigo', []);
+    $nombres = $request->input('nombre', []);
+    $precios = $request->input('precio', []);
+    $cantidades = $request->input('cantidad', []);
+    $cantidadesA = $request->input('cantidadF', []);
+    $cantidadesX = $request->input('cantidadN', []);
+    $idItems = $request->input('idItem', []);
+    $cantidadesOriginalesCliente = $request->input('cantidad_original_cliente', []);
+    $logisticaModificada = $request->input('logistica_modificada', []);
+
+    $contador = count($presentaciones);
+    for ($i = 0; $i < count($presentaciones); $i++) {
       $contador--;
-      $pedidoTotal += floatval($request->precio[$i]) * intval($request->cantidad[$i]);
-      //dd($pedidoPedido);
-	  
-//dd($request->codigo[$i],$pedidoPedido[$i]['codigo'],$request->precio[$i],$request->all(),$pedidoPedido);
-		if($request->codigo[$i] == 0){
-			// Comentado por Santi ya que duplica los items
-			// $item = [
-			// "imagen" => "",
-			// "codigo" => "0",
-			// "nombre" => $request->nombre[$i],
-			// "precio" => $request->precio[$i],
-			// "presentacionid" => "0",
-			// "stock" => "0",
-			// "id" => 0,
-			// "cantidad" => $request->cantidad[$i],
-			// "idPedido" => 0,
-		  // ];
-			// array_unshift($pedidoPedido, $item);
-			// $pedidoPedido[$cantidadPedido]['precio'] = $request->precio[$i];
-		}elseif (trim($pedidoPedido[$i]['codigo']) == trim($request->codigo[$i])) {
-        $pedidoPedido[$i]['precio'] = $request->precio[$i];
-      }  
+      $codigo = trim((string)($codigos[$i] ?? ''));
+      $nombre = (string)($nombres[$i] ?? '');
+      $precio = floatval($precios[$i] ?? 0);
+      $cantidadPreparada = intval($cantidades[$i] ?? 0);
+      $cantidadFacturadaA = intval($cantidadesA[$i] ?? 0);
+      $cantidadFacturadaX = intval($cantidadesX[$i] ?? 0);
+      $esEnvio = $codigo === '' || $codigo === '0';
+
+      $pedidoTotal += $precio * $cantidadPreparada;
+
+      $pedidoIndex = null;
+      $idItem = $idItems[$i] ?? null;
+      if ($idItem !== null && $idItem !== '') {
+        $pedidoIndex = $pedidoIndexPorId[(string)$idItem] ?? null;
+      }
+
+      if ($pedidoIndex === null && !$esEnvio) {
+        foreach ($pedidoPedido as $index => $productoPedido) {
+          if (isset($productoPedido['codigo']) && trim((string)$productoPedido['codigo']) === $codigo) {
+            $pedidoIndex = $index;
+            break;
+          }
+        }
+      }
+
+      $esProductoPedido = !$esEnvio && $pedidoIndex !== null && isset($pedidoPedido[$pedidoIndex]);
+      $cantidadOriginalCliente = intval($cantidadesOriginalesCliente[$i] ?? ($esProductoPedido ? ($pedidoPedido[$pedidoIndex]['cantidad_original_cliente'] ?? $cantidadPreparada) : $cantidadPreparada));
+      $cantidadFueModificadaPorLogistica = intval($logisticaModificada[$i] ?? ($esProductoPedido ? ($pedidoPedido[$pedidoIndex]['cantidad_modificada_logistica'] ?? 0) : 0)) === 1;
+      $cantidadBasePendiente = $cantidadFueModificadaPorLogistica ? $cantidadOriginalCliente : $cantidadPreparada;
+      $cantidadPendiente = $cantidadBasePendiente - $cantidadFacturadaA - $cantidadFacturadaX;
+
+      if ($esProductoPedido) {
+        $pedidoPedido[$pedidoIndex]['precio'] = $precio;
+        $pedidoPedido[$pedidoIndex]['precio_congelado'] = $precio;
+        $pedidoPedido[$pedidoIndex]['cantidad'] = $cantidadPreparada;
+        $pedidoPedido[$pedidoIndex]['cantidad_original_cliente'] = $cantidadOriginalCliente;
+        $pedidoPedido[$pedidoIndex]['cantidad_preparada_logistica'] = $cantidadPreparada;
+
+        $pedidoPedido[$pedidoIndex]['logistica_facturacion_snapshot'] = [
+          'fecha' => now('America/Argentina/Buenos_Aires')->format('Y-m-d H:i:s'),
+          'cantidad_original_cliente' => $cantidadOriginalCliente,
+          'cantidad_preparada_logistica' => $cantidadPreparada,
+          'cantidad_logistica_modificada' => $cantidadFueModificadaPorLogistica ? 1 : 0,
+          'cantidad_a_previa' => intval($pedidoPedido[$pedidoIndex]['cantidadF'] ?? 0),
+          'cantidad_x_previa' => intval($pedidoPedido[$pedidoIndex]['cantidadN'] ?? 0),
+          'cantidad_pendiente_previa' => intval($pedidoPedido[$pedidoIndex]['cantidadP'] ?? 0),
+          'cantidad_a_enviada' => $cantidadFacturadaA,
+          'cantidad_x_enviada' => $cantidadFacturadaX,
+          'cantidad_pendiente_calculada' => $cantidadPendiente,
+        ];
+      }
 	  
       
       ///NOTA DE PEDIDO COMPLETA
       $producto = new stdClass();
-      $producto->nombre = $request->nombre[$i];
-      $producto->precio = floatval($request->precio[$i]);
-      $producto->cantidad = intval($request->cantidadF[$i]) + intval($request->cantidadN[$i]);
+      $producto->nombre = $nombre;
+      $producto->precio = $precio;
+      $producto->cantidad = $cantidadFacturadaA + $cantidadFacturadaX;
       $totalCompleto += $producto->precio * $producto->cantidad;
       array_push($productosCompleto, $producto);
       ///SEPARAR LO FACTURADO / LO NEGRO Y LO PENDIENTE
-      if ($request->cantidadF[$i] > 0) {
+      if ($cantidadFacturadaA > 0) {
         $producto = new stdClass();
-        $producto->nombre = $request->nombre[$i];
-        $producto->precio = floatval($request->precio[$i]);
-        $producto->cantidad = intval($request->cantidadF[$i]);
+        $producto->nombre = $nombre;
+        $producto->precio = $precio;
+        $producto->cantidad = $cantidadFacturadaA;
         $total += $producto->precio * $producto->cantidad;
-        $pedidoPedido[$i]['cantidadF'] = $request->cantidadF[$i];
+        if ($esProductoPedido) {
+          $pedidoPedido[$pedidoIndex]['cantidadF'] = $cantidadFacturadaA;
+        }
         array_push($productos, $producto);
         $facturado = 1;
       }
-      if ($request->cantidadN[$i] > 0) {
+      if ($cantidadFacturadaX > 0) {
         $producto = new stdClass();
-        $producto->nombre = $request->nombre[$i];
-        $producto->precio = floatval($request->precio[$i]);
-        $producto->cantidad = intval($request->cantidadN[$i]);
+        $producto->nombre = $nombre;
+        $producto->precio = $precio;
+        $producto->cantidad = $cantidadFacturadaX;
         $totalNegro += $producto->precio * $producto->cantidad;
-        $pedidoPedido[$i]['cantidadN'] = $request->cantidadN[$i];
+        if ($esProductoPedido) {
+          $pedidoPedido[$pedidoIndex]['cantidadN'] = $cantidadFacturadaX;
+        }
         array_push($productosNegro, $producto);
         $facturadoNegro = 1;
       }
 
-	if (isset($request->cantidadP[$i]) && isset($request->nombre[$i])) {
-      if ($request->cantidadP[$i] > 0) {
+      if ($esProductoPedido) {
+      if ($cantidadPendiente > 0) {
         $pendiente = 1;
 
         $producto = new stdClass();
-        $producto->nombre = $request->nombre[$i];
-        $producto->cantidad = intval($request->cantidadP[$i]);
-        $pedidoPedido[$i]['cantidadP'] = $request->cantidadP[$i];
+        $producto->nombre = $nombre;
+        $producto->cantidad = $cantidadPendiente;
         array_push($productosPendiente, $producto);
       }
-      $cantidadPendiente = intVal($request->cantidad[$i]);
-      if (intVal($request->cantidadF[$i]) > 0) {
-        $cantidadPendiente = $cantidadPendiente - intVal($request->cantidadF[$i]);
+      $pedidoPedido[$pedidoIndex]['cantidadP'] = $cantidadPendiente;
       }
-      if (intVal($request->cantidadN[$i]) > 0) {
-        $cantidadPendiente = $cantidadPendiente - intVal($request->cantidadN[$i]);
-      }
-      $pedidoPedido[$i]['cantidadP'] = $cantidadPendiente;
-	}
     }
+
+    if ($pendiente == 1) {
+      $estado = "FACTURADO PENDIENTES";
+    }
+
     $pedido->pedido = json_encode($pedidoPedido);
 
     /// TOTAL CON DESCUENTO Y + IVA
@@ -883,6 +933,10 @@ truncate cobros;
       $output = $pdf->output();
       $this->savePdf("N" . $res['CAE'] . ".pdf", $output);
     }
+    if ($res == 0) {
+      $res = [];
+      $res['CAE'] = $pedido->id;
+    }
     if ($pedido->estado == "APROBADO") {
 
       //PARA EL TOTAL DEL PEDIDO
@@ -928,15 +982,20 @@ truncate cobros;
     $pedido->estado = $estado;
     $pedido->facturaTotal = $totalIva;
     $pedido->total = $pedidoTotal;
-	if (isset($request->descuento)) {
-        $descuentoremito = $FacturasRelacion->total * $descuento;
-    } else {
-        $descuentoremito = 0;
+    if (isset($FacturasRelacion)) {
+      if (isset($request->descuento)) {
+          $descuentoremito = $FacturasRelacion->total * $descuento;
+      } else {
+          $descuentoremito = 0;
+      }
+      $FacturasRelacion->descuento = $descuentoremito;
+      $FacturasRelacion->subtotal = $totalCompleto-$descuentoremito;
+      $FacturasRelacion->save();
     }
-    $FacturasRelacion->descuento = $descuentoremito;
-    $FacturasRelacion->subtotal = $totalCompleto-$descuentoremito; 
     $pedido->save();
-    $pdf->stream();
+    if (isset($pdf)) {
+      $pdf->stream();
+    }
     return redirect()->route('adm.facturado');
     // tipos de alicuotas ( iva )    
     // borre todos los insultos generados al gobierno por profesionalismo

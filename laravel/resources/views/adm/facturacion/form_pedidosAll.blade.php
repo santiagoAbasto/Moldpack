@@ -7,6 +7,46 @@
         {{ session()->get('success') }}
     </div>
 @endif
+<style>
+  .cantidad-pendiente-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .cantidad-pendiente-alerta {
+    color: #b42318;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.15;
+    text-transform: uppercase;
+  }
+
+  .cantidad-pendiente-campo.is-warning {
+    background: #fff1f1;
+    border: 2px solid #dc2626;
+    color: #b42318;
+    font-weight: 900;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+  }
+
+  .cantidad-logistica-modificada {
+    border: 2px solid #dc2626 !important;
+    background: #fff1f1 !important;
+    color: #b42318 !important;
+    font-weight: 900;
+  }
+
+  .cantidad-logistica-alerta {
+    color: #b42318;
+    display: block;
+    font-size: 11px;
+    font-weight: 900;
+    line-height: 1.15;
+    margin-top: 4px;
+    text-transform: uppercase;
+  }
+</style>
 @include('adm.partials.filtros_pedidos', ['routeName' => 'pedidoAll', 'estados' => $estados ?? []])
 <div class="card esconder mb-1 d-flex flex-column flex-md-row justify-content-between align-items-center" >
 	<table class="table" style="margin-bottom:unset">
@@ -113,6 +153,7 @@
           </tr>
         </tbody>
       </table>
+      @include('adm.partials.comentario_pedido', ['item' => $item])
       <div id="msj" style="display:none;position: relative;left: 84%;background: green;width: 150px;text-align: center;border: 2px solid green;color:#fff;"></div>
     </div>
   </div>
@@ -120,7 +161,7 @@
 <!-- Modal -->
 <div id="modal_{{$item->id}}" class="box_toggle" style="display: none">    
     <div id="modal_{{$item->id}}">      
-      <form class="d-flex flex-column" method="post" action="{{route('adm.facturacion.post')}}">
+      <form class="d-flex flex-column" method="post" action="{{route('adm.facturacion.post')}}" id="tabla_{{$item->id}}">
         <input type="hidden" value="{{$item->id}}" name="idPedido">        
         @csrf
         <div class="d-flex flex-row justify-content-between w-100">
@@ -132,10 +173,13 @@
           <div class="col-1 mb-2">Cantidad Pendiente</div>
         </div>
         @forelse ($item->pedido as $value)		  
-        <div class="d-flex flex-row justify-content-between w-100">
+        <div class="d-flex flex-row justify-content-between w-100" id="row">
           <div class="col-6 mb-2">
             <input type="hidden" name="presentacion[]" value="{{$value->presentacionid}}">
             <input type="hidden" name="codigo[]" value="{{$value->codigo}}">
+            <input type="hidden" name="idItem[]" value="{{$value->idPedido ?? $loop->index}}">
+            <input type="hidden" name="cantidad_original_cliente[]" value="{{$value->cantidad_original_cliente ?? $value->cantidad}}">
+            <input type="hidden" name="logistica_modificada[]" value="{{!empty($value->cantidad_modificada_logistica) ? 1 : 0}}">
             <input readonly="readonly" class="form-control" id="nombre" name="nombre[]" value="{{$value->codigo}} {{$value->nombre}}">
             </input>
           </div>
@@ -144,8 +188,11 @@
             </input>
           </div>
           <div class="col-1 mb-2">
-            <input  readonly="readonly" class="form-control" id="cantidad" name="cantidad[]" value="{{$value->cantidad}}">
+            <input  readonly="readonly" class="form-control @if(!empty($value->cantidad_modificada_logistica)) cantidad-logistica-modificada @endif" id="cantidad" name="cantidad[]" value="{{$value->cantidad}}">
             </input>
+            @if(!empty($value->cantidad_modificada_logistica))
+              <small class="cantidad-logistica-alerta">Logistica modifico: original {{$value->cantidad_original_cliente ?? '-'}}</small>
+            @endif
           </div>
           <div class="col-1 mb-2">
             @php
@@ -174,9 +221,11 @@
             @isset($value->cantidadP)
                 @php $valueP = $value->cantidadP; @endphp
             @endisset
-            <input disabled type="number" min="0" @if($valueP != 0) style="background-color:red;font-weight: 900;color: #000;" @endif class="form-control" value="{{$valueP}}" max="{{$value->cantidad}}">
-            <input type="hidden" id="cantidad" name="cantidadP[]" value="{{$valueP}}">
-            </input>
+            <div class="cantidad-pendiente-wrap">
+              <input readonly type="text" class="form-control cantidad-pendiente-campo" value="{{$valueP > 0 ? '+' . $valueP : $valueP}}">
+              <input type="hidden" id="cantidad" name="cantidadP[]" value="{{$valueP}}">
+              <small class="cantidad-pendiente-alerta"></small>
+            </div>
           </div>          
         </div>
         @empty
@@ -201,6 +250,87 @@
 <!--Alertify-->
 <script src="//cdn.jsdelivr.net/npm/alertifyjs@1.13.1/build/alertify.min.js"></script>
 <script>
+  function numeroEnteroSeguro(valor) {
+    const numero = parseInt(valor, 10);
+    return Number.isNaN(numero) ? 0 : numero;
+  }
+
+  function pintarPendiente(row, recalcular) {
+    const codigoInput = row.querySelector('input[name="codigo[]"]');
+    const cantidadInput = row.querySelector('input[name="cantidad[]"]');
+    const cantidadOriginalInput = row.querySelector('input[name="cantidad_original_cliente[]"]');
+    const logisticaInput = row.querySelector('input[name="logistica_modificada[]"]');
+    const cantidadFInput = row.querySelector('input[name="cantidadF[]"]');
+    const cantidadNInput = row.querySelector('input[name="cantidadN[]"]');
+    const pendienteInput = row.querySelector('.cantidad-pendiente-campo');
+    const pendienteHidden = row.querySelector('input[name="cantidadP[]"]');
+    const alerta = row.querySelector('.cantidad-pendiente-alerta');
+
+    if (!cantidadInput || !cantidadFInput || !cantidadNInput || !pendienteInput || !pendienteHidden || !alerta) {
+      return;
+    }
+
+    const cantidad = numeroEnteroSeguro(cantidadInput.value);
+    const cantidadOriginal = cantidadOriginalInput ? numeroEnteroSeguro(cantidadOriginalInput.value) : cantidad;
+    const logisticaModificada = logisticaInput && logisticaInput.value === '1';
+    const cantidadA = numeroEnteroSeguro(cantidadFInput.value);
+    const cantidadX = numeroEnteroSeguro(cantidadNInput.value);
+    const esEnvio = codigoInput && numeroEnteroSeguro(codigoInput.value) === 0;
+    const basePendiente = logisticaModificada ? cantidadOriginal : cantidad;
+    const pendiente = recalcular
+      ? (esEnvio ? 0 : basePendiente - cantidadA - cantidadX)
+      : numeroEnteroSeguro(pendienteHidden.value);
+
+    pendienteInput.value = pendiente > 0 ? '+' + pendiente : String(pendiente);
+    pendienteHidden.value = pendiente;
+    pendienteInput.classList.toggle('is-warning', pendiente !== 0);
+
+    if (pendiente > 0) {
+      alerta.textContent = logisticaModificada
+        ? 'Faltan ' + pendiente + ' unidad(es). Logistica preparo ' + cantidad + ' de ' + cantidadOriginal
+        : 'Faltan ' + pendiente + ' unidad(es)';
+    } else if (pendiente < 0) {
+      alerta.textContent = 'Sobran ' + Math.abs(pendiente) + ' unidad(es)';
+    } else {
+      alerta.textContent = '';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('form[id^="tabla_"] #row').forEach(function(row) {
+      pintarPendiente(row, false);
+    });
+
+    document.addEventListener('input', function(event) {
+      if (!event.target.matches('input[name="cantidadF[]"], input[name="cantidadN[]"], input[name="cantidad[]"]')) {
+        return;
+      }
+
+      const row = event.target.closest('#row');
+      if (row) {
+        pintarPendiente(row, true);
+      }
+    });
+
+    document.addEventListener('focusin', function(event) {
+      if (!event.target.matches('input[name="cantidadF[]"], input[name="cantidadN[]"], input[name="cantidad[]"], input[name="nombre[]"]')) {
+        return;
+      }
+
+      const row = event.target.closest('#row');
+      if (row) {
+        pintarPendiente(row, true);
+      }
+    });
+
+    document.addEventListener('click', function(event) {
+      const row = event.target.closest('form[id^="tabla_"] #row');
+      if (row) {
+        pintarPendiente(row, true);
+      }
+    });
+  });
+
   $(document).on('keyup mouseup', '#editar', function() {
       let contenedor = this.parentElement;
       let fila = contenedor.parentElement

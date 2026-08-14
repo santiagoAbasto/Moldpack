@@ -335,10 +335,19 @@ class ProductosController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        if ($request->query('confirm') !== '1') {
+            return redirect()->route('Productos')->with('warning', 'No se elimino el producto. Para borrar primero debe confirmar la accion.');
+        }
+
         $producto = Producto::find($id);
-        storage::delete($producto->imagen);
+
+        if (!$producto) {
+            return redirect()->route('Productos')->with('warning', 'El producto no existe o ya fue eliminado.');
+        }
+
+        Storage::delete($producto->imagen);
         $producto->delete();
         ProductoRelacion::where('producto_id','=',$producto->id)->delete(); 
         PresentacionRelacion::where('producto_id','=',$producto->id)->delete(); 

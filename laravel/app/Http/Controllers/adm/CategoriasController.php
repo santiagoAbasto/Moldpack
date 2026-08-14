@@ -39,14 +39,16 @@ class CategoriasController extends Controller
      */
     public function store(Request $request)
     {
+        $request->validate([
+            'nombre' => 'required',
+            'imagen' => 'required|image|max:8192',
+        ]);
 
-       
-        //dd($request->all());
         $Categoria = new Categoria;
         $Categoria->orden = $request->orden;
         $Categoria->nombre = $request->nombre;                
         $Categoria->descripcion = $request->descripcion;        
-        $Categoria->imagen = $request->file('imagen')->store('public/Categorias');        
+        $this->guardarImagenCategoria($request, $Categoria);
         $Categoria->destacado = 0;
         if ($request->destacado == "on") {
             $Categoria->destacado = 1;
@@ -75,9 +77,14 @@ class CategoriasController extends Controller
             $contenido = new Contenido();            
         }
         if($request->file('imagen') === null){
-            
+
         }else{
+            if ($contenido->imagen) {
+                Storage::delete($contenido->imagen);
+                $this->eliminarImagenPublica($contenido->imagen);
+            }
             $contenido->imagen = $request->file('imagen')->store('public/categorias');
+            $this->sincronizarImagenPublica($contenido->imagen);
         }
         $contenido->seccion = "categorias";
         $contenido->save();
@@ -126,11 +133,16 @@ class CategoriasController extends Controller
      * @return \Illuminate\Http\Response
      */
     public function update(Request $request, $id)
-    {        
-        $Categorias = Categoria::find($id);       
+    {
+        $request->validate([
+            'nombre' => 'required',
+            'imagen' => 'nullable|image|max:8192',
+        ]);
+
+        $Categorias = Categoria::findOrFail($id);
 
         if($request->file('imagen')){
-            $Categorias->imagen = $request->file('imagen')->store('public/Categorias');
+            $this->guardarImagenCategoria($request, $Categorias);
         }
         if($request->destacar){
             $Categorias->destacar= $request->destacar;
@@ -171,10 +183,85 @@ class CategoriasController extends Controller
      */
     public function destroy($id)
     {
-         $Categoria = Categoria::find($id);
-        storage::delete($Categoria->imagen);
+        $Categoria = Categoria::findOrFail($id);
+        Storage::delete($Categoria->imagen);
+        $this->eliminarImagenPublica($Categoria->imagen);
         $Categoria->delete();
         return redirect()->back()->with('success', "Registro eliminado exitósamente" );
+    }
+
+    private function guardarImagenCategoria(Request $request, Categoria $categoria)
+    {
+        if (!$request->hasFile('imagen')) {
+            return;
+        }
+
+        if ($categoria->imagen) {
+            Storage::delete($categoria->imagen);
+            $this->eliminarImagenPublica($categoria->imagen);
+        }
+
+        $categoria->imagen = $request->file('imagen')->store('public/categorias');
+        $this->sincronizarImagenPublica($categoria->imagen);
+    }
+
+    private function storagePublicRelativePath($path)
+    {
+        $path = trim((string) $path);
+        $path = ltrim($path, '/');
+        return preg_replace('#^(storage/|public/)#', '', $path);
+    }
+
+    private function sincronizarImagenPublica($path)
+    {
+        $relativePath = $this->storagePublicRelativePath($path);
+
+        if ($relativePath === '') {
+            return;
+        }
+
+        $sourcePath = Storage::disk('public')->path($relativePath);
+
+        if (!is_file($sourcePath)) {
+            return;
+        }
+
+        foreach ($this->destinosPublicos($relativePath) as $destinationPath) {
+            $destinationDirectory = dirname($destinationPath);
+            if (!is_dir($destinationDirectory)) {
+                @mkdir($destinationDirectory, 0775, true);
+            }
+            @copy($sourcePath, $destinationPath);
+        }
+    }
+
+    private function eliminarImagenPublica($path)
+    {
+        $relativePath = $this->storagePublicRelativePath($path);
+
+        if ($relativePath === '') {
+            return;
+        }
+
+        foreach ($this->destinosPublicos($relativePath) as $destinationPath) {
+            if (is_file($destinationPath)) {
+                @unlink($destinationPath);
+            }
+        }
+    }
+
+    private function destinosPublicos($relativePath)
+    {
+        $destinos = [
+            public_path('storage/'.$relativePath),
+        ];
+
+        $httpdocsRoot = base_path('../httpdocs');
+        if (is_dir($httpdocsRoot)) {
+            $destinos[] = $httpdocsRoot.'/storage/'.$relativePath;
+        }
+
+        return array_unique($destinos);
     }
 
 }

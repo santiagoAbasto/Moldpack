@@ -63,7 +63,7 @@ Route::get('/registro', 'PageController@registro')->name('page.registro');
 Route::post('/registro', 'PageController@registropost')->name('page.nuevoclienteform');
 
 Route::post('/newsletter', 'PageController@subscribirse')->name('subscribirse');
-Route::post('/guardars', 'PageController@clientes_post')->name('page.nuevocliente');
+Route::post('/guardars', 'PageController@registropost')->name('page.nuevocliente');
 
 ///RESET PASSWORD
 Route::get('/forgot-password', 'PageController@password')->name('password');
@@ -92,6 +92,8 @@ Route::middleware(['auth.cliente', 'admin.no-store'])->group(function(){
   Route::get('/pedido/producto/{id}',  'ZonaPrivadaController@productoPedido')->name('page.productoPedido');
 
   Route::post('carrito','ZonaPrivadaController@carrito_post')->name('carrito_post');
+  Route::get('carrito/abandonado','ZonaPrivadaController@obtenerCarritoAbandonado')->name('carrito.abandonado.obtener');
+  Route::post('carrito/guardar-abandonado','ZonaPrivadaController@guardarCarritoAbandonado')->name('carrito.abandonado.guardar');
   Route::get('lista_de_precio','ZonaPrivadaController@lista')->name('descargas_zp');
   Route::post('carrito_enviar','ZonaPrivadaController@carrito_enviar')->name('carrito_enviar');
 

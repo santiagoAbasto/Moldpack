@@ -15,7 +15,9 @@ use App\Models\Rede;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use App\Models\Contacto;
+use App\Mail\ClienteRegistroPendiente;
 
 class LoginClienteController extends Controller
 {
@@ -268,7 +270,7 @@ class LoginClienteController extends Controller
         return Auth::guard('cliente');
     }
 
-    protected function registro_cliente()
+    public function registro_cliente()
     { 
         $active = 'page.registro';
         $contactos = Contacto::orderBy('orden', 'ASC')->get();
@@ -279,31 +281,70 @@ class LoginClienteController extends Controller
        return view('page.registro', compact('logosheader','logosfooter', 'contactos', 'active','redes'));
     }
     
-    protected function registro_cliente_post(request $request)
+    public function registro_cliente_post(request $request)
     {
         
-           request()->validate([
-            'username' => 'required|unique:clientes',
-            'email' => 'required|unique:clientes',
+           $request->validate([
+            'username' => 'required|unique:clientes,username',
+            'email' => 'required|email|unique:clientes,email',
+            'password' => 'required|string|min:6',
+          ], [
+            'username.required' => 'Ingrese un usuario.',
+            'username.unique' => 'Este usuario ya esta registrado.',
+            'email.required' => 'Ingrese un email.',
+            'email.email' => 'Ingrese un email valido.',
+            'email.unique' => 'Este email ya esta registrado.',
+            'password.required' => 'Ingrese una contrasena.',
+            'password.min' => 'La contrasena debe tener al menos 6 caracteres.',
           ]);
 
         $user = new cliente;
+        $passwordPlano = (string) $request->password;
         
           $user->username = $request->username;
-          $user->password = Hash::make($request->password);
-          try { $user->password_encrypted = Crypt::encryptString($request->password); } catch (\Exception $e) {}
+          $user->password = Hash::make($passwordPlano);
+          try { $user->password_encrypted = Crypt::encryptString($passwordPlano); } catch (\Exception $e) {}
           $user->email = $request->email;   
           $user->descuento = 0;
           $user->rol = '';
           $user->estado = 0;
           $user->save();
 
-          $contacto = DB::table('contactos')->get();
-          $contenido['contacto'] = json_decode(json_encode($contacto), true);
-  
-          $contenido = json_decode(json_encode($contenido), FALSE);
-          $contacto = Contacto::first();
-          return view('front.registro_true' , compact('contenido','contacto'));
+          $contactoRegistro = Contacto::first();
+          $mensajeRegistro = 'Tu registro se ha completado con exito. En las proximas 24 hs nos contactaremos contigo via mail para la activacion de la pagina.';
+
+          try {
+              Mail::to($user->email)->send(new ClienteRegistroPendiente($user, $contactoRegistro));
+          } catch (\Exception $e) {
+              \Log::warning('No se pudo enviar el aviso de registro pendiente al cliente.', [
+                  'cliente_id' => $user->id,
+                  'email' => $user->email,
+                  'error' => $e->getMessage(),
+              ]);
+          }
+
+          $copias = Contacto::get()->flatMap(function ($contacto) {
+              return [
+                  $contacto->correo ?? null,
+                  $contacto->correoF ?? null,
+              ];
+          })->push('ventas@moldpack.com.ar')->filter(function ($email) {
+              return filter_var($email, FILTER_VALIDATE_EMAIL);
+          })->unique()->values();
+
+          foreach ($copias as $correo) {
+              try {
+                  Mail::to($correo)->send(new ClienteRegistroPendiente($user, $contactoRegistro));
+              } catch (\Exception $e) {
+                  \Log::warning('No se pudo enviar el aviso interno de registro pendiente.', [
+                      'cliente_id' => $user->id,
+                      'email_destino' => $correo,
+                      'error' => $e->getMessage(),
+                  ]);
+              }
+          }
+
+          return redirect()->route('page.registro')->with('success', $mensajeRegistro);
     }
 
    

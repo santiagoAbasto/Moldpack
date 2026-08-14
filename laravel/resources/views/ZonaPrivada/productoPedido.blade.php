@@ -228,6 +228,7 @@ td{
 
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js" integrity="sha512-894YE6QWD5I59HgZOGReFYm4dnWc1Qt5NtvYSaNcOP+u1T9qYdvdihz0PPSiiqn/+/3e7Jo4EaG7TubfWGUrMQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+@include('ZonaPrivada.partials.carrito_storage')
 <script>
 
     function pedido(id){
@@ -244,18 +245,10 @@ td{
         subtotal: $(`#fila_${id} #subtotal`).data('subtotal'),
      };
 
-     obj_fila = sessionStorage.getItem('obj_fila');
-     if(obj_fila != null){
-        obj_fila = jQuery.parseJSON(obj_fila);
-        obj_fila = $.makeArray(obj_fila);   
-        obj_fila.push(fila);
-        consulta = obj_fila;
-          
-         sessionStorage.setItem('obj_fila',JSON.stringify(obj_fila));
-     }else{
-        sessionStorage.setItem('obj_fila',JSON.stringify(fila));
-        consulta = fila;
-     }
+     obj_fila = window.moldpackCartGet();
+     obj_fila.push(fila);
+     consulta = obj_fila;
+     window.moldpackCartSet(obj_fila);
     alertify.set('notifier','position', 'bottom-right');
     alertify.notify(`Se agrego el producto al carrito`,'success',3);     
     }

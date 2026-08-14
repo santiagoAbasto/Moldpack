@@ -178,6 +178,7 @@ td{
 
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js" integrity="sha512-894YE6QWD5I59HgZOGReFYm4dnWc1Qt5NtvYSaNcOP+u1T9qYdvdihz0PPSiiqn/+/3e7Jo4EaG7TubfWGUrMQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+@include('ZonaPrivada.partials.carrito_storage')
     <script>
         
         function removeItemFromArr ( arr, item ) {
@@ -188,10 +189,7 @@ td{
         function eliminar(id){
             var nombre = $('#'+id).data('pid')            
             
-            obj_fila = sessionStorage.getItem('obj_fila');
-            
-            obj_fila = jQuery.parseJSON(obj_fila);
-            obj_fila = $.makeArray(obj_fila);
+            obj_fila = window.moldpackCartGet();
             
             obj_fila.forEach(function(element){                
                 prod = element['pid']
@@ -200,23 +198,23 @@ td{
                 }
             })            
 
-            sessionStorage.setItem('obj_fila',JSON.stringify(obj_fila));
+            window.moldpackCartSet(obj_fila);
             
             $('#'+id).remove();
             f_total()
         }
         function tabla(){
             tabla = $('.table-responsive');
+            tabla.empty();
+            $('.carritoVacio').addClass('d-none');
             
             var template='';
-            obj_fila = sessionStorage.getItem('obj_fila');
-            if(obj_fila === null){                
+            obj_fila = window.moldpackCartGet();
+            if(obj_fila.length === 0){
                 $('.carritoVacio').removeClass('d-none')
             }
             subtotal = 0;
-            if(obj_fila != null){
-                obj_fila = jQuery.parseJSON(obj_fila);
-                obj_fila = $.makeArray(obj_fila);
+            if(obj_fila.length > 0){
                 total = 0;
                 
                 template += '<table class="table w-100 m-0">'
@@ -240,7 +238,7 @@ td{
                     template +=`<tr id="fila_${i}" data-pid="${obj_fila[i]['pid']}" style="border-bottom:1px solid #ccc;" class="filaProducto">`                                        
                     template +=`<input type="hidden" name="pid[]" value="${obj_fila[i]['pid']}">`
                     template +=`<input type="hidden" name="producto[]" value="${obj_fila[i]['producto']}">`
-                    template +=`<input type="hidden" name="cantidad[]" id="cantidadHidden" value="1">`
+                    template +=`<input type="hidden" name="cantidad[]" id="cantidadHidden" value="${parseInt(obj_fila[i]['cantidad'] || 1)}">`
                     
                     
                     template +=`<td class="pt-2 pb-2" style="vertical-align: middle;border:unset;padding-left:1vh;font-size: 16px;font-weight:bold;text-transform:uppercase;color:#707070;">${obj_fila[i]['categoria']}<br>${obj_fila[i]['nombre']}</td>`
@@ -248,15 +246,15 @@ td{
                     // template +=`<td class="pt-2 pb-2" style="vertical-align: middle;border:unset;padding-left:1vh;font-size: 16px;font-weight:bold;text-transform:uppercase;color:#707070;">${obj_fila[i]['pulgadas']}</td>`
                     // template +=`<td class="pt-2 pb-2" style="vertical-align: middle;border:unset;padding-left:1vh;font-size: 16px;font-weight:bold;text-transform:uppercase;color:#707070;">${obj_fila[i]['diametro']}</td>`
                     // template +=`<td class="pt-2 pb-2" style="vertical-align: middle;border:unset;padding-left:1vh;font-size: 16px;font-weight:bold;text-transform:uppercase;color:#707070;">${obj_fila[i]['espesor']}</td>`
-                    template +=`<td class="pt-2 pb-2" style="vertical-align: middle;border:unset;padding-left:1vh;font-size: 16px;font-weight:bold;text-transform:uppercase;color:#707070;width: 150px;"><input data-fila="fila_${i}" class="form-control w-50 input_number" type="number" min="1" value="1"></td>`
+                    template +=`<td class="pt-2 pb-2" style="vertical-align: middle;border:unset;padding-left:1vh;font-size: 16px;font-weight:bold;text-transform:uppercase;color:#707070;width: 150px;"><input data-fila="fila_${i}" class="form-control w-50 input_number" type="number" min="1" value="${parseInt(obj_fila[i]['cantidad'] || 1)}"></td>`
                     template +=`<td id="unitario"  data-precio="${parseFloat(obj_fila[i]['precio'])}" class="pt-2 pb-2" style="vertical-align: middle;border:unset;padding-left:1vh;font-size: 16px;font-weight:bold;text-transform:uppercase;color:#707070;">$ ${parseFloat(obj_fila[i]['precio'])}</td>`
-                    template +=`<td id="ptotal" data-precio="${parseFloat(obj_fila[i]['precio'])}"  class="pt-2 pb-2" style="vertical-align: middle;border:unset;padding-left:1vh;font-size: 16px;font-weight:bold;text-transform:uppercase;color:#707070;">$ ${parseFloat(obj_fila[i]['precio'])}</td>`
+                    template +=`<td id="ptotal" data-precio="${parseFloat(obj_fila[i]['precio']) * parseInt(obj_fila[i]['cantidad'] || 1)}"  class="pt-2 pb-2" style="vertical-align: middle;border:unset;padding-left:1vh;font-size: 16px;font-weight:bold;text-transform:uppercase;color:#707070;">$ ${parseFloat(obj_fila[i]['precio']) * parseInt(obj_fila[i]['cantidad'] || 1)}</td>`
                     template +=`<td class="pt-2 pb-2" style="vertical-align: middle;border:unset;padding-left:1vh;font-size: 16px;font-weight:bold;text-transform:uppercase;color:#707070;"><buttom type="buttom" onclick="eliminar('fila_${i}')" class="btn"><i class="far fa-trash-alt"></i></buttom></td>`
                     template +='</tr>'
                     
                     
                     precio = parseFloat(obj_fila[i]['precio']);
-                    cantidad = 1;
+                    cantidad = parseInt(obj_fila[i]['cantidad'] || 1);
                     subtotal = precio*cantidad;
                     total +=subtotal; 
                 }
@@ -294,12 +292,24 @@ td{
             }
         });
         document.onload = tabla();
+        document.addEventListener('moldpack-cart-restored', function () {
+            tabla();
+        });
+        if (window.moldpackCartRestoredItems) {
+            tabla();
+        }
 
         ///FUNCION ESCUCHAR CANTIDAD
         $(document).on('keyup mouseup', '.input_number', function() {
             var fila = $(this).data('fila')
             var cantidad = $(this).val();
             var precio = $(`#${fila} #unitario`).data('precio')
+            var filaIndice = parseInt(String(fila).replace('fila_', ''), 10);
+            var carritoPersistido = window.moldpackCartGet();
+            if (carritoPersistido[filaIndice]) {
+                carritoPersistido[filaIndice]['cantidad'] = cantidad;
+                window.moldpackCartSet(carritoPersistido);
+            }
 
             precio = parseFloat(precio).toFixed(2)
             var total =precio*cantidad            

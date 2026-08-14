@@ -104,6 +104,75 @@ class PedidosController extends Controller
         return $query;
     }
 
+    private function precioCongelado($producto, $presentacion = null, $precioRequest = null)
+    {
+        foreach ([$precioRequest, $producto->precio_congelado ?? null, $producto->precio ?? null, optional($presentacion)->precio] as $precio) {
+            if ($precio !== null && $precio !== '' && is_numeric($precio)) {
+                return round(floatval($precio), 2);
+            }
+        }
+
+        return 0;
+    }
+
+    private function cantidadEntera($valor)
+    {
+        return max(0, intval($valor ?? 0));
+    }
+
+    private function indicePedidoPorId(array $items, $idItem)
+    {
+        foreach ($items as $index => $item) {
+            $idPedido = $item->idPedido ?? $index;
+            if ((string) $idPedido === (string) $idItem) {
+                return $index;
+            }
+        }
+
+        return null;
+    }
+
+    private function marcarCantidadLogistica(&$item, $cantidadNueva, $registrarAuditoria = true)
+    {
+        $cantidadNueva = $this->cantidadEntera($cantidadNueva);
+        $cantidadOriginal = $this->cantidadEntera($item->cantidad_original_cliente ?? $item->cantidad ?? 0);
+        $cantidadAnterior = $this->cantidadEntera($item->cantidad ?? 0);
+
+        if (!isset($item->cantidad_original_cliente)) {
+            $item->cantidad_original_cliente = $cantidadOriginal;
+        }
+
+        $item->cantidad = $cantidadNueva;
+        $item->cantidad_preparada_logistica = $cantidadNueva;
+        $item->cantidad_modificada_logistica = $cantidadNueva !== $cantidadOriginal ? 1 : 0;
+
+        if ($item->cantidad_modificada_logistica && $registrarAuditoria) {
+            $usuario = auth()->check() ? auth()->user() : null;
+            $item->cantidad_logistica_anterior = $cantidadAnterior;
+            $item->cantidad_logistica_usuario = $usuario ? ($usuario->username ?? $usuario->name ?? $usuario->email ?? 'panel') : 'panel';
+            $item->cantidad_logistica_fecha = now('America/Argentina/Buenos_Aires')->format('Y-m-d H:i:s');
+        }
+    }
+
+    private function recalcularTotalPedido(Pedido $pedido, array $items)
+    {
+        $subtotal = 0;
+        foreach ($items as $item) {
+            $subtotal += $this->precioCongelado($item) * $this->cantidadEntera($item->cantidad ?? 0);
+        }
+
+        $cliente = Cliente::find($pedido->usuario_id);
+        $descuento = 1;
+        if ($cliente && $cliente->descuento != 0 && $cliente->descuento !== null) {
+            $descuento = (100 - $cliente->descuento) / 100;
+        }
+
+        $carrito = CarritoContenido::first();
+        $iva = $carrito ? ((floatval($carrito->iva) / 100) + 1) : 1;
+
+        return round($subtotal * $descuento * $iva, 2);
+    }
+
     private function normalizarPedidos($pedidos, $sortByPrice = false)
     {
         foreach ($pedidos as $item) {
@@ -112,12 +181,39 @@ class PedidosController extends Controller
             $item->username = $item->username ?: 'cliente_eliminado_' . $item->usuario_id;
 
             $productos = json_decode($item->pedido) ?: [];
+            foreach ($productos as $index => $producto) {
+                if (!isset($producto->idPedido) || $producto->idPedido === '') {
+                    $producto->idPedido = $index;
+                }
+            }
+
             $coleccion = collect($productos);
             $productos = $sortByPrice
                 ? $coleccion->sortBy([['codigo', SORT_NATURAL], ['precio', 'asc']])->values()->all()
                 : $coleccion->sortBy([['codigo', SORT_NATURAL]])->values()->all();
 
             foreach ($productos as $producto) {
+                $producto->cantidad = $this->cantidadEntera($producto->cantidad ?? 0);
+                if (!isset($producto->cantidad_original_cliente)) {
+                    $producto->cantidad_original_cliente = $producto->cantidad;
+                }
+                if (!isset($producto->cantidad_preparada_logistica)) {
+                    $producto->cantidad_preparada_logistica = $producto->cantidad;
+                }
+                if (
+                    in_array($item->estado, ['pendiente', 'ARMANDO', 'APROBADO'], true)
+                    && empty($producto->cantidad_modificada_logistica)
+                    && isset($producto->cantidadF)
+                    && empty($producto->cantidadN)
+                    && empty($producto->cantidadP)
+                    && $this->cantidadEntera($producto->cantidadF) !== $this->cantidadEntera($producto->cantidad)
+                ) {
+                    $this->marcarCantidadLogistica($producto, $producto->cantidadF, false);
+                    $producto->cantidadF = 0;
+                    $producto->cantidadN = 0;
+                    $producto->cantidadP = 0;
+                }
+
                 if (!isset($producto->presentacionid)) {
                     continue;
                 }
@@ -125,7 +221,9 @@ class PedidosController extends Controller
                 $presentacion = PresentacionRelacion::find($producto->presentacionid);
                 if ($presentacion) {
                     $producto->stock = $presentacion->stock;
-                    $producto->precio = $presentacion->precio;
+                    $producto->precio_actual = $presentacion->precio;
+                    $producto->precio = $this->precioCongelado($producto, $presentacion);
+                    $producto->precio_congelado = $producto->precio;
                 }
             }
 
@@ -212,13 +310,26 @@ public function pedidoAll(Request $request){
                     continue;
                 }
 
-                $cantidad = max(0, intval($pedido->cantidad ?? 0));
+                if (
+                    empty($pedido->cantidad_modificada_logistica)
+                    && isset($pedido->cantidadF)
+                    && $this->cantidadEntera($pedido->cantidadF) !== $this->cantidadEntera($pedido->cantidad ?? 0)
+                ) {
+                    $this->marcarCantidadLogistica($pedido, $pedido->cantidadF);
+                    $pedido->cantidadF = 0;
+                    $pedido->cantidadN = 0;
+                    $pedido->cantidadP = 0;
+                }
+
+                $cantidad = $this->cantidadEntera($pedido->cantidad ?? 0);
                 $presentacion->stock = intval($presentacion->stock) - $cantidad;
                 $presentacion->save();
 
-                $pedido->precio = $presentacion->precio;
+                $precioCongelado = $this->precioCongelado($pedido, $presentacion);
+                $pedido->precio = $precioCongelado;
+                $pedido->precio_congelado = $precioCongelado;
                 $pedido->stock = $presentacion->stock;
-                $total_pedido += floatval($presentacion->precio) * $cantidad;
+                $total_pedido += $precioCongelado * $cantidad;
             }
 
             $descuento = 1;
@@ -275,15 +386,23 @@ public function pedidoAll(Request $request){
         $arrPresentacion = explode('-',$request->producto);
         $auxPresentacion = PresentacionRelacion::findorFail($arrPresentacion[0]);
         $producto = Producto::find($auxPresentacion->producto_id);
-        $auxCart = json_decode($pedido->pedido,true) ?: [];
-        $idPedido = count($auxCart);
+        $auxCart = json_decode($pedido->pedido) ?: [];
+        $idPedido = collect($auxCart)->map(function ($item, $index) {
+            return intval($item->idPedido ?? $index);
+        })->max();
+        $idPedido = $idPedido === null ? 0 : $idPedido + 1;
         $auxItem = new stdClass;
         $auxItem->codigo = $auxPresentacion->codigo;
         $auxItem->nombre = $producto->nombre." ".$auxPresentacion->presentacion;
-        $auxItem->precio = $auxPresentacion->precio;
+        $precioCongelado = round(floatval($auxPresentacion->precio), 2);
+        $auxItem->precio = $precioCongelado;
+        $auxItem->precio_congelado = $precioCongelado;
         $auxItem->presentacionid = $auxPresentacion->id;
         $auxItem->stock = $auxPresentacion->stock;
         $auxItem->cantidad = $request->cantidad;
+        $auxItem->cantidad_original_cliente = $request->cantidad;
+        $auxItem->cantidad_preparada_logistica = $request->cantidad;
+        $auxItem->cantidad_modificada_logistica = 0;
         $auxItem->idPedido = $idPedido;
         array_push($auxCart,$auxItem);
         $pedido->pedido = json_encode($auxCart);
@@ -292,23 +411,59 @@ public function pedidoAll(Request $request){
         
     }
     public function update(Request $request){
-        $pedidos = Pedido::findorFail($request->id);
-        $precentacion = PresentacionRelacion::findorFail($request->idPresentacion);
-        $arrPedido = json_decode($pedidos->pedido);
-        $arrPedido[$request->idItem]->cantidad = $request->cantidad;
-		$arrPedido[$request->idItem]->cantidadF = $request->cantidadF;
-        $arrPedido[$request->idItem]->nombre = $request->nombre;
-        $arrPedido[$request->idItem]->precio = $precentacion->precio;
-        $arrPedido[$request->idItem]->presentacionid = $precentacion->id;
-        $arrPedido[$request->idItem]->codigo = $precentacion->codigo;
-        $arrPedido[$request->idItem]->id = $precentacion->producto_id;
-        $arrPedido[$request->idItem]->stock = $precentacion->stock;
- 
-        $arrPedido = json_encode($arrPedido);
-        $pedidos->pedido = $arrPedido;
-        $pedidos->save();
-        
-        return "Registro modificado";
+        $respuesta = "Registro modificado";
+
+        DB::transaction(function () use ($request, &$respuesta) {
+            $pedidos = Pedido::lockForUpdate()->findOrFail($request->id);
+            $arrPedido = json_decode($pedidos->pedido) ?: [];
+            $indice = $this->indicePedidoPorId($arrPedido, $request->idItem);
+
+            if ($indice === null) {
+                $respuesta = "No se encontro el item del pedido";
+                return;
+            }
+
+            $item = $arrPedido[$indice];
+            $presentacionId = $request->input('idPresentacion', $item->presentacionid ?? null);
+            $precentacion = $presentacionId ? PresentacionRelacion::find($presentacionId) : null;
+
+            if (!$precentacion && isset($item->presentacionid)) {
+                $precentacion = PresentacionRelacion::find($item->presentacionid);
+            }
+
+            if (!$precentacion) {
+                $respuesta = "No se encontro la presentacion del producto";
+                return;
+            }
+
+            $cantidadBase = $this->cantidadEntera($request->cantidad ?? $item->cantidad ?? 0);
+            $cantidadLogistica = $request->has('cantidadF')
+                ? $this->cantidadEntera($request->cantidadF)
+                : $cantidadBase;
+
+            $this->marcarCantidadLogistica($item, $cantidadLogistica);
+            $item->nombre = $request->nombre ?: $item->nombre;
+            $precioCongelado = $this->precioCongelado($item, $precentacion, $request->precio);
+            $item->precio = $precioCongelado;
+            $item->precio_congelado = $precioCongelado;
+            $item->presentacionid = $precentacion->id;
+            $item->codigo = $precentacion->codigo;
+            $item->id = $precentacion->producto_id;
+            $item->stock = $precentacion->stock;
+
+            if (in_array($pedidos->estado, ['pendiente', 'ARMANDO', 'APROBADO'], true)) {
+                $item->cantidadF = 0;
+                $item->cantidadN = 0;
+                $item->cantidadP = 0;
+            }
+
+            $arrPedido[$indice] = $item;
+            $pedidos->pedido = json_encode($arrPedido);
+            $pedidos->total = $this->recalcularTotalPedido($pedidos, $arrPedido);
+            $pedidos->save();
+        });
+
+        return $respuesta;
     }
     public function eliminar(Request $request){
         $pedidos = Pedido::findorFail($request->id);

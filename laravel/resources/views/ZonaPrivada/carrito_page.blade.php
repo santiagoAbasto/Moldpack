@@ -138,6 +138,7 @@ td{
 <script src="https://code.jquery.com/jquery-3.5.1.min.js" integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0=" crossorigin="anonymous"></script>
 <!--Alertify-->
 <script src="//cdn.jsdelivr.net/npm/alertifyjs@1.13.1/build/alertify.min.js"></script>
+@include('ZonaPrivada.partials.carrito_storage')
    <script>
         
         function removeItemFromArr ( arr, item ) {
@@ -148,14 +149,14 @@ td{
         
         function tabla(){
             tabla = $('.table-responsive');
+            tabla.empty();
+            $('.carritoVacio').addClass('d-none');
             iva = '{{$iva}}';
             descuento = '{{$descuento}}';
             var template='';
-            obj_fila = sessionStorage.getItem('obj_fila');
+            obj_fila = window.moldpackCartGet();
             subtotal = 0;
-            if(obj_fila != null){
-                obj_fila = jQuery.parseJSON(obj_fila);
-                obj_fila = $.makeArray(obj_fila);
+            if(obj_fila.length > 0){
                 total = 0;                
                 
                 template += '<table class="table w-100 border" >'
@@ -228,7 +229,7 @@ obj_fila[i]['subtotal'] = obj_fila[i]['subtotal'].replace('.', ',').replace(/\B(
                 $('#totalhidden').val("$ "+totaliva)                
                 
             }else{
-               
+               $('.carritoVacio').removeClass('d-none')
             }
             
         }
@@ -242,15 +243,18 @@ obj_fila[i]['subtotal'] = obj_fila[i]['subtotal'].replace('.', ',').replace(/\B(
             }
         });
         document.onload = tabla();
+        document.addEventListener('moldpack-cart-restored', function () {
+            tabla();
+        });
+        if (window.moldpackCartRestoredItems) {
+            tabla();
+        }
 
         function eliminar(id){
             var codigo = $('#'+id).data('codigo')
             var presentacion = $('#'+id).data('presentacion')
             
-            obj_fila = sessionStorage.getItem('obj_fila');
-            
-            obj_fila = jQuery.parseJSON(obj_fila);
-            obj_fila = $.makeArray(obj_fila);
+            obj_fila = window.moldpackCartGet();
             
             obj_fila.forEach(function(element){
                 if(element['codigo'] == codigo && element['presentacion'] == presentacion){
@@ -258,7 +262,7 @@ obj_fila[i]['subtotal'] = obj_fila[i]['subtotal'].replace('.', ',').replace(/\B(
                 }
             })            
 
-            sessionStorage.setItem('obj_fila',JSON.stringify(obj_fila));
+            window.moldpackCartSet(obj_fila);
             
             $('#'+id).remove();
             location.reload();
@@ -272,9 +276,15 @@ obj_fila[i]['subtotal'] = obj_fila[i]['subtotal'].replace('.', ',').replace(/\B(
         let cantidad = $(this).val();
         let precio = $(this).data('precio')
         let total = parseFloat(precio)*cantidad        
+        let carritoPersistido = window.moldpackCartGet();
+        if (carritoPersistido[id]) {
+            carritoPersistido[id]['cantidad'] = cantidad;
+            carritoPersistido[id]['subtotal'] = total;
+            window.moldpackCartSet(carritoPersistido);
+        }
 
         $(`.subtotal${id}`).html("$ "+total.toFixed(2))
-        $(`.filaSubtotal${id}`).value = total.toFixed(2);
+        $(`.filaSubtotal${id}`).val(total.toFixed(2));
         let totalPedido = 0;
         let filaTabla = document.querySelectorAll(".tablaFila");
             let producto = new Array();
@@ -351,13 +361,13 @@ obj_fila[i]['subtotal'] = obj_fila[i]['subtotal'].replace('.', ',').replace(/\B(
             success: function (response) {                  
                 console.log(response);
                 swal(response,"","success");
-                sessionStorage.removeItem('obj_fila');
+                window.moldpackCartClear();
             },
             error: function(response){
                 console.log(response);
                 $('#btnprocesa').prop('disabled', false);
                 if ([401, 419].indexOf(response.status) !== -1) {
-                    sessionStorage.removeItem('obj_fila');
+                    window.moldpackCartClear();
                     swal("La sesion expiro","Inicie sesion nuevamente.","warning");
                     setTimeout(function () {
                         window.location.href = response.responseJSON && response.responseJSON.redirect ? response.responseJSON.redirect : '{{route('page.inicio')}}';

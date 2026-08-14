@@ -148,10 +148,22 @@ class ClientesController extends Controller
         // $vendedor = new vendedor_cliente;
 
         
-         request()->validate([
-            'username' => 'required|unique:clientes',
-            'email' => 'required|unique:clientes',
+         $request->validate([
+            'username' => 'required|unique:clientes,username',
+            'email' => 'required|email|unique:clientes,email',
+            'password' => 'required|string|min:8|confirmed',
+          ], [
+            'username.required' => 'Ingrese un usuario.',
+            'username.unique' => 'Este usuario ya existe.',
+            'email.required' => 'Ingrese un email.',
+            'email.email' => 'Ingrese un email valido.',
+            'email.unique' => 'Este email ya esta registrado.',
+            'password.required' => 'Ingrese una contrasena.',
+            'password.min' => 'La contrasena debe tener al menos 8 caracteres.',
+            'password.confirmed' => 'La confirmacion de contrasena no coincide.',
           ]);
+
+          $passwordPlano = (string) $request->password;
 
           $user->username = $request->username;
           $user->nombre = $request->nombre;
@@ -166,8 +178,8 @@ class ClientesController extends Controller
           if($request->cuit){
             $user->cuit = $request->cuit;
           }
-          $user->password = Hash::make($request->password);
-          try { $user->password_encrypted = Crypt::encryptString($request->password); } catch (\Exception $e) {}
+          $user->password = Hash::make($passwordPlano);
+          try { $user->password_encrypted = Crypt::encryptString($passwordPlano); } catch (\Exception $e) {}
           $user->email = $request->email;          
           
           $user->descuento = 0;

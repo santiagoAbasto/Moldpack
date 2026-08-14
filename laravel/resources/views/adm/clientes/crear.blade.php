@@ -1,6 +1,16 @@
 @extends('adm.layouts')
 
 @section('content')
+@if($errors->any())
+  <div class="alert alert-danger" role="alert">
+    <strong>No se pudo crear el cliente.</strong>
+    <ul class="mb-0 mt-2">
+      @foreach($errors->all() as $error)
+        <li>{{$error}}</li>
+      @endforeach
+    </ul>
+  </div>
+@endif
 <form method="post" action="{{route('nuevocliente')}}" enctype="multipart/form-data">
 	@csrf
   <div class="row px-4">
@@ -44,7 +54,7 @@
 
     <div class="form-group col-12">
       <label for="email">Email</label>
-      <input type="text" class="form-control" id="email" name="email" required>
+      <input type="email" class="form-control @error('email') is-invalid @enderror" id="email" name="email" value="{{old('email')}}" required>
     </div>
   </div>
 
@@ -62,7 +72,7 @@
         <div>
           <label for="password">Contrase&ntilde;a</label>
           <div class="admin-password-control">
-            <input id="password" type="password" class="form-control @error('password') is-invalid @enderror" name="password" autocomplete="new-password">
+            <input id="password" type="password" class="form-control @error('password') is-invalid @enderror" name="password" required minlength="8" autocomplete="new-password">
             <button type="button" class="admin-btn admin-btn-secondary" id="toggle-password" onclick="togglePassword()">Mostrar</button>
           </div>
           @error('password')
@@ -74,7 +84,7 @@
 
         <div>
           <label for="password-confirm">Confirmar contrase&ntilde;a</label>
-          <input id="password-confirm" type="password" class="form-control" name="password_confirmation" autocomplete="new-password">
+          <input id="password-confirm" type="password" class="form-control" name="password_confirmation" required minlength="8" autocomplete="new-password">
         </div>
       </div>
 

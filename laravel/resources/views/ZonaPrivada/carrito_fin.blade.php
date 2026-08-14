@@ -16,6 +16,8 @@
 <script>
     window.onload = function () {      
       sessionStorage.removeItem('obj_fila');
+      localStorage.removeItem('moldpack_cart_cliente_{{ Auth::guard('cliente')->id() }}');
+      localStorage.removeItem('moldpack_cart_cliente_{{ Auth::guard('cliente')->id() }}_updated_at');
     }
 </script>
 @endsection

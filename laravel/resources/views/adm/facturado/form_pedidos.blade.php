@@ -234,6 +234,7 @@
           </tr>
         </tbody>
       </table>
+      @include('adm.partials.comentario_pedido', ['item' => $item])
       <div id="msj" style="display:none;position: relative;left: 84%;background: green;width: 150px;text-align: center;border: 2px solid green;color:#fff;"></div>
     </div>
   </div>
@@ -305,6 +306,7 @@
             <th class="col-1 mb-2">Cantidad facturado</th>
             <th class="col-1 mb-2">Cantidad X</th>
             <th class="col-1 mb-2">Cantidad Pendiente</th>
+            <th scope="col">Logistica al facturar</th>
             <th scope="col">Precio</th>
             <th scope="col">Total</th>            
           </tr>
@@ -345,6 +347,21 @@
               @endphp
               @endisset
               <td><input disabled @if($valueP != 0) style="background-color:red;font-weight: 900;color: #000;" @endif class="form-control" type="number" value="{{$valueP}}" id="cantidad" name="cantidad"></td>
+              <td style="font-size:12px;min-width:190px;">
+                @php
+                  $snapshot = $value->logistica_facturacion_snapshot ?? null;
+                  $snapshot = $snapshot ? (array) $snapshot : null;
+                @endphp
+                @if($snapshot)
+                  <b>{{ $snapshot['fecha'] ?? '' }}</b><br>
+                  Pedido: {{ $snapshot['cantidad_original'] ?? 0 }}<br>
+                  A: {{ $snapshot['cantidad_a_enviada'] ?? 0 }} /
+                  X: {{ $snapshot['cantidad_x_enviada'] ?? 0 }}<br>
+                  Pendiente: {{ $snapshot['cantidad_pendiente_calculada'] ?? 0 }}
+                @else
+                  -
+                @endif
+              </td>
               <td><input disabled class="form-control" type="numbre" value="{{$value->precio}}" id="precio" name="precio"></td>
               @php
                 $totalFila = floatval($value->precio)*intval($value->cantidad);

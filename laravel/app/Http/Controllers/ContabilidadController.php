@@ -38,10 +38,57 @@ class ContabilidadController extends Controller
             $item->username = $item->username ?: 'cliente_eliminado_' . $item->usuario_id;
 
             $productos = json_decode($item->pedido) ?: [];
+            foreach ($productos as $producto) {
+                if (!isset($producto->cantidad_original_cliente)) {
+                    $producto->cantidad_original_cliente = intval($producto->cantidad ?? 0);
+                }
+                if (!isset($producto->cantidad_preparada_logistica)) {
+                    $producto->cantidad_preparada_logistica = intval($producto->cantidad ?? 0);
+                }
+            }
             $item->pedido = collect($productos)->values()->all();
         }
 
         return $pedidos;
+    }
+
+    private function cantidadEntera($valor)
+    {
+        return max(0, intval($valor ?? 0));
+    }
+
+    private function indicePedidoPorId(array $items, $idItem)
+    {
+        foreach ($items as $index => $item) {
+            $idPedido = $item->idPedido ?? $index;
+            if ((string) $idPedido === (string) $idItem) {
+                return $index;
+            }
+        }
+
+        return null;
+    }
+
+    private function recalcularTotalPedido(Pedido $pedido, array $items)
+    {
+        $subtotal = 0;
+        foreach ($items as $item) {
+            $precio = is_numeric($item->precio_congelado ?? null)
+                ? floatval($item->precio_congelado)
+                : floatval($item->precio ?? 0);
+            $subtotal += $precio * $this->cantidadEntera($item->cantidad ?? 0);
+        }
+
+        $cliente = Cliente::find($pedido->usuario_id);
+        $descuento = 1;
+        if ($cliente && $cliente->descuento != 0 && $cliente->descuento !== null) {
+            $descuento = (100 - $cliente->descuento) / 100;
+        }
+
+        $carrito = CarritoContenido::first();
+        $iva = $carrito ? ((floatval($carrito->iva) / 100) + 1) : 1;
+
+        return round($subtotal * $descuento * $iva, 2);
     }
 
     private function aplicarFiltrosPedidos($query, Request $request, array $estadosPermitidos = [])
@@ -121,34 +168,42 @@ class ContabilidadController extends Controller
         return redirect()->route('adm.facturacion')->with('success', 'Pedido anulado.');
     }
     public function update(Request $request){
-        $pedidos = Pedido::findorFail($request->id);
-        $arrPedido = json_decode($pedidos->pedido);
-        $arrProductos = array();
-        foreach($arrPedido as $item){
-            if($request->cantidad != 0){
-                $producto = new stdClass;
-                if($request->idItem == $item->idPedido){
-                    $producto->codigo = $item->codigo;
-                    $producto->nombre = $request->nombre;
-                    $producto->precio = $request->precio;
-                    $producto->id = $item->id;
-                    $producto->idPedido = $request->idItem;
-                    $producto->cantidad = $request->cantidad;
-                }else{                
-                    $producto->codigo = $item->codigo;
-                    $producto->nombre = $item->nombre;
-                    $producto->precio = $item->precio;
-                    $producto->id = $item->id;
-                    $producto->idPedido = $item->idPedido;
-                    $producto->cantidad = $item->cantidad;
-                }
-                array_push($arrProductos,$producto);
+        $respuesta = "Registro modificado";
+
+        DB::transaction(function () use ($request, &$respuesta) {
+            $pedidos = Pedido::lockForUpdate()->findOrFail($request->id);
+            $arrPedido = json_decode($pedidos->pedido) ?: [];
+            $indice = $this->indicePedidoPorId($arrPedido, $request->idItem);
+
+            if ($indice === null) {
+                $respuesta = "No se encontro el item del pedido";
+                return;
             }
-        }
-        $arrPedido = json_encode($arrProductos);
-        $pedidos->pedido = $arrPedido;
-        $pedidos->save();
-        
-        return "Registro modificado";
+
+            $item = $arrPedido[$indice];
+            if (!isset($item->cantidad_original_cliente)) {
+                $item->cantidad_original_cliente = $this->cantidadEntera($item->cantidad ?? 0);
+            }
+            if (!isset($item->cantidad_preparada_logistica)) {
+                $item->cantidad_preparada_logistica = $this->cantidadEntera($item->cantidad ?? 0);
+            }
+
+            $precio = is_numeric($request->precio)
+                ? round(floatval($request->precio), 2)
+                : round(floatval($item->precio_congelado ?? $item->precio ?? 0), 2);
+
+            $item->codigo = $request->codigo ?? $item->codigo;
+            $item->nombre = $request->nombre ?? $item->nombre;
+            $item->precio = $precio;
+            $item->precio_congelado = $precio;
+            $item->cantidad = $this->cantidadEntera($request->cantidad ?? $item->cantidad ?? 0);
+
+            $arrPedido[$indice] = $item;
+            $pedidos->pedido = json_encode($arrPedido);
+            $pedidos->total = $this->recalcularTotalPedido($pedidos, $arrPedido);
+            $pedidos->save();
+        });
+
+        return $respuesta;
     }
 }

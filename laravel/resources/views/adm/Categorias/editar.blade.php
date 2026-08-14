@@ -3,6 +3,26 @@
 <script src="{{asset('js/producto.js')}}"></script>
 
 @section('content')
+@php
+  $categoryImageUrl = function ($path) {
+      $path = trim((string) $path);
+      if ($path === '') {
+          return null;
+      }
+      if (preg_match('/^https?:\/\//', $path)) {
+          return $path;
+      }
+      $path = ltrim($path, '/');
+      if (strpos($path, 'storage/') === 0 || strpos($path, 'img/') === 0) {
+          return asset($path);
+      }
+      if (strpos($path, 'public/') === 0) {
+          return asset(Storage::url($path));
+      }
+      return asset('storage/'.$path);
+  };
+  $imagenActual = $categoryImageUrl($Categorias->imagen);
+@endphp
 <form method="post" action="{{route('updateCategoria',$Categorias->id)}}" enctype="multipart/form-data">
 	@csrf
   @method('put')
@@ -23,10 +43,13 @@
   
   <div class="row">
     <div class="form-group col-md-6">
-      <label for="imagen">Imagen Familia</label>
-      <input type="file" class="form-control-file" id="imagen" name="imagen" >
-      <small>Resolucion recomendada: 390px X 390px</small>
-      <img src="{{asset(Storage::url($Categorias->imagen))}}" class="img-thumbnail mt-4">
+      <label for="imagen">Imagen categoria / portada home</label>
+      <input type="file" class="form-control-file" id="imagen" name="imagen" accept="image/*">
+      <small>Resolucion recomendada: 390px X 390px. Si la categoria esta destacada, esta foto tambien se ve en la pagina principal.</small>
+      <div class="mt-4" id="previewWrap" style="{{$imagenActual ? '' : 'display:none;'}}">
+        <img id="categoriaImagenPreview" src="{{$imagenActual}}" class="img-thumbnail" style="max-width:390px;width:100%;height:auto;object-fit:cover;" onerror="this.src='{{asset('img/logo2.jpg')}}';">
+        <div class="mt-2 text-muted" style="font-size:13px;">Vista previa de la imagen que se vera en categoria/home.</div>
+      </div>
     </div>
   </div>
 
@@ -67,6 +90,30 @@
                      ]
              });
          });
+
+        document.addEventListener('DOMContentLoaded', function () {
+            var input = document.getElementById('imagen');
+            var preview = document.getElementById('categoriaImagenPreview');
+            var previewWrap = document.getElementById('previewWrap');
+
+            if (!input || !preview || !previewWrap) {
+                return;
+            }
+
+            input.addEventListener('change', function () {
+                var file = input.files && input.files[0];
+                if (!file) {
+                    return;
+                }
+
+                var reader = new FileReader();
+                reader.onload = function (event) {
+                    preview.src = event.target.result;
+                    previewWrap.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            });
+        });
     
 </script>
 

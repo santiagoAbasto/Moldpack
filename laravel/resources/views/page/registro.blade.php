@@ -9,8 +9,21 @@
 </div>
 <div class="d-flex justify-content-center">
     @if(session('success'))
-    <div class="alert alert-success box_container">
-    {{session('success')}}
+    <div id="registro-exito" class="alert alert-success box_container" style="border-left:6px solid #EC458B;background:#fff8fb;color:#303342;font-size:18px;line-height:1.5;max-width:760px;">
+        <b>Solicitud recibida.</b><br>
+        {{session('success')}}
+    </div>
+    @endif
+</div>
+<div class="d-flex justify-content-center">
+    @if($errors->any())
+    <div class="alert alert-danger box_container" style="max-width:760px;">
+        <b>No pudimos completar el registro.</b>
+        <ul class="mb-0 mt-2">
+            @foreach($errors->all() as $error)
+                <li>{{$error}}</li>
+            @endforeach
+        </ul>
     </div>
     @endif
 </div>
@@ -55,52 +68,57 @@
 
     <div class="form-group col-12">
       <label for="email">Email</label>
-      <input type="text" class="form-control" id="email" name="email" required>
+      <input type="email" class="form-control @error('email') is-invalid @enderror" id="email" name="email" value="{{old('email')}}" required autocomplete="email">
+        @error('email')
+            <span class="invalid-feedback" role="alert">
+                <strong>{{ $message }}</strong>
+            </span>
+        @enderror
     </div>
 
     <div class="form-group col-12">
       <label for="empresa">Empresa</label>
-      <input type="text" class="form-control" id="razonSocial" name="razonSocial" required>      
+      <input type="text" class="form-control" id="razonSocial" name="razonSocial" value="{{old('razonSocial')}}" required>
     </div>
     
     
     <div class="form-group col-12">
       <label for="nombre">Nombre de fantas&iacutea</label>
-      <input type="text" class="form-control" id="nombre" name="nombre" required>      
+      <input type="text" class="form-control" id="nombre" name="nombre" value="{{old('nombre')}}" required>
     </div>
 
     <div class="form-group col-12">
       <label for="apellido">Nombre y Apellido</label>
-      <input type="text" class="form-control" id="apellido" name="apellido" required>      
+      <input type="text" class="form-control" id="apellido" name="apellido" value="{{old('apellido')}}" required>
     </div>
 
     <div class="form-group col-12">
       <label for="direccion">Direccion / Localidad / Provincia</label>
-      <input type="text" class="form-control" id="direccion" name="direccion" required>      
+      <input type="text" class="form-control" id="direccion" name="direccion" value="{{old('direccion')}}" required>
     </div>
     
     <div class="form-group col-12">
       <label for="direccion">Direccion de entrega</label>
-      <input type="text" class="form-control" id="direccionEntrega" name="direccionEntrega" required>      
+      <input type="text" class="form-control" id="direccionEntrega" name="direccionEntrega" value="{{old('direccionEntrega')}}" required>
     </div>
 	  <div class="form-group col-12">
       <label for="telefono">Telefono</label>
-      <input type="tel" class="form-control" id="telefono" name="telefono" required>      
+      <input type="tel" class="form-control" id="telefono" name="telefono" value="{{old('telefono')}}" required>
     </div>
 
     <div class="form-group col-12">
       <label for="dni">DNI</label>
-      <input type="number" class="form-control" id="dni" name="dni" required>      
+      <input type="number" class="form-control" id="dni" name="dni" value="{{old('dni')}}" required>
     </div>
 
     <div class="form-group col-12">
       <label for="cuit">Cuit</label>
-      <input type="number" class="form-control" id="cuit" name="cuit" required>      
+      <input type="number" class="form-control" id="cuit" name="cuit" value="{{old('cuit')}}" required>
     </div>
     
     <div class="form-group col-12">
-      <label for="password" class="col-md-4 col-form-label ">Contrase&ntilde;a</label>
-      <input id="password" type="password" class="form-control @error('password') is-invalid @enderror" name="password"  autocomplete="new-password">
+      <label for="password_registro" class="col-md-4 col-form-label ">Contrase&ntilde;a</label>
+      <input id="password_registro" type="password" class="form-control @error('password') is-invalid @enderror" name="password" required minlength="6" autocomplete="new-password">
         @error('password')
             <span class="invalid-feedback" role="alert">
                 <strong>{{ $message }}</strong>
@@ -120,5 +138,16 @@
     </div>
 </div>
 
+
+@if(session('success'))
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var alerta = document.getElementById('registro-exito');
+    if (alerta) {
+      alerta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
+</script>
+@endif
 
 @endsection

@@ -15,6 +15,7 @@
 	            <th scope="col" class="pedido-col">N&deg; de pedido</th>
             <th scope="col">CLIENTE</th>
             <th scope="col">FECHA DE EMISI&Oacute;N</th>
+            <th scope="col">COMENTARIO</th>
             <th scope="col">IMPORTE</th>            
             <th scope="col">COMPROBANTES</th>
             <th scope="col">ESTADO</th>
@@ -30,6 +31,15 @@
 	                <th scope="col" class="pedido-col" style="padding: 8px 29px!important;"><span class="pedido-numero">#{{$item->id}}</span></th>
                 <th scope="col" style="padding: 8px 29px!important;">{{optional($item->cliente)->razonSocial ?? optional($item->cliente)->nombre ?? 'Cliente eliminado'}}</th>
                 <th scope="col" style="padding: 8px 29px!important;">{{$item->fecha}}</th>
+                <th scope="col" style="padding: 8px 29px!important;max-width:260px;">
+                  @php $comentarioPedido = trim((string) ($item->mensaje ?? '')); @endphp
+                  @if($comentarioPedido !== '')
+                    <span style="display:block;color:#EC458B;font-weight:800;font-size:12px;text-transform:uppercase;">Comentario</span>
+                    <span style="white-space:pre-wrap;">{{ $comentarioPedido }}</span>
+                  @else
+                    -
+                  @endif
+                </th>
                 <th scope="col" style="padding: 8px 29px!important;">$ {{$item->facturaTotal}}</th>                
                 <th scope="col" class="container_button" style="padding: 8px 29px!important;display:flex;flex-direction:column;gap:8px;align-items:flex-start;">
                 @forelse ($item->obtenerRelacionados as $factura)

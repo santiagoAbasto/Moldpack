@@ -25,6 +25,7 @@ use App\Models\Metadato;
 use App\Models\Service;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\ContactoMail;
+use App\Mail\ClienteRegistroPendiente;
 use App\Models\Subcriptores;
 use App\Mail\Carrito;
 use App\Mail\DondeComprarMail;
@@ -113,15 +114,24 @@ class PageController extends Controller
         $redes = Rede::get();
         $metadatos = Metadato::where('seccion', 'productos')->first();
 
-        $user = new Cliente;
-        request()->validate([        
-            'email' => 'required|unique:clientes',
+        $request->validate([
+            'email' => 'required|email|unique:clientes,email',
+            'password' => 'required|string|min:6',
+        ], [
+            'email.required' => 'Ingrese un email.',
+            'email.email' => 'Ingrese un email valido.',
+            'email.unique' => 'Este email ya esta registrado.',
+            'password.required' => 'Ingrese una contrasena.',
+            'password.min' => 'La contrasena debe tener al menos 6 caracteres.',
         ]);
+
+        $user = new Cliente;
         $date = date('d/m/y');
+        $passwordPlano = (string) $request->password;
         $user->username = $request->email;
         $user->razonSocial = $request->razonSocial;
-        $user->password = Hash::make($request->password);
-        try { $user->password_encrypted = Crypt::encryptString($request->password); } catch (\Exception $e) {}
+        $user->password = Hash::make($passwordPlano);
+        try { $user->password_encrypted = Crypt::encryptString($passwordPlano); } catch (\Exception $e) {}
         $user->email = $request->email;
         $user->descuento = 0;          
         $user->nombre = $request->nombre;
@@ -135,7 +145,41 @@ class PageController extends Controller
         $user->fechaInicio = $date;
         $user->save();
 
-        return back()->with('success', "Gracias por registrarte. Nos contactaremos a la brevedad");
+        $contactoRegistro = Contacto::first();
+        $mensajeRegistro = 'Tu registro se ha completado con exito. En las proximas 24 hs nos contactaremos contigo via mail para la activacion de la pagina.';
+
+        try {
+            Mail::to($user->email)->send(new ClienteRegistroPendiente($user, $contactoRegistro));
+        } catch (\Exception $e) {
+            \Log::warning('No se pudo enviar el aviso de registro pendiente al cliente.', [
+                'cliente_id' => $user->id,
+                'email' => $user->email,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        $copias = Contacto::get()->flatMap(function ($contacto) {
+            return [
+                $contacto->correo ?? null,
+                $contacto->correoF ?? null,
+            ];
+        })->push('ventas@moldpack.com.ar')->filter(function ($email) {
+            return filter_var($email, FILTER_VALIDATE_EMAIL);
+        })->unique()->values();
+
+        foreach ($copias as $correo) {
+            try {
+                Mail::to($correo)->send(new ClienteRegistroPendiente($user, $contactoRegistro));
+            } catch (\Exception $e) {
+                \Log::warning('No se pudo enviar el aviso interno de registro pendiente.', [
+                    'cliente_id' => $user->id,
+                    'email_destino' => $correo,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return redirect()->route('page.registro')->with('success', $mensajeRegistro);
     }
     public function password(){
         $active = '';

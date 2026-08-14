@@ -55,7 +55,7 @@
         $publicPath = ltrim(Storage::url($storagePath), '/');
         $publicFileExists = file_exists(public_path($publicPath)) || file_exists(base_path('../httpdocs/'.$publicPath));
 
-        return Storage::disk('public')->exists($storagePath) && $publicFileExists
+        return (Storage::disk('public')->exists($storagePath) || $publicFileExists)
             ? asset($publicPath)
             : null;
     };
